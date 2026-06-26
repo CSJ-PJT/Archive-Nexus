@@ -30,7 +30,8 @@ class NexusApiSmokeTest {
 
         mvc.perform(get("/api/simulator/status"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.factoryCount").value(3));
+                .andExpect(jsonPath("$.factoryCount").value(3))
+                .andExpect(jsonPath("$.parallelWorkerCount").value(3));
 
         mvc.perform(post("/api/simulator/start"))
                 .andExpect(status().isOk())

@@ -8,7 +8,7 @@ const tabs = ['Overview', 'Factories', 'Inventory', 'Quality', 'Maintenance', 'L
 type Tab = (typeof tabs)[number];
 
 const fallback: Overview = {
-  simulator: { running: false, tick: 0, factoryCount: 0, alertCount: 0, rpaTaskCount: 0, updatedAt: '' },
+  simulator: { running: false, tick: 0, factoryCount: 0, alertCount: 0, rpaTaskCount: 0, parallelWorkerCount: 0, updatedAt: '' },
   factories: [],
   recentAlerts: [],
   pendingRpaTasks: [],
@@ -92,6 +92,7 @@ export function App() {
         <section className="metrics">
           <Metric icon={<Activity />} label="Tick" value={overview.simulator.tick} />
           <Metric icon={<Factory />} label="Factories" value={overview.simulator.factoryCount} />
+          <Metric icon={<Gauge />} label="Workers" value={overview.simulator.parallelWorkerCount} />
           <Metric icon={<AlertTriangle />} label="Alerts" value={overview.simulator.alertCount} />
           <Metric icon={<ShieldCheck />} label="RPA Tasks" value={overview.simulator.rpaTaskCount} />
           <Metric icon={<Gauge />} label="Critical" value={criticalCount} />
@@ -189,6 +190,7 @@ function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions }: { ov
         <div className="rows">
           <span>상태: {overview.simulator.running ? '실행 중' : '정지'}</span>
           <span>데이터 생성 주기: 5초</span>
+          <span>병렬 factory worker: {overview.simulator.parallelWorkerCount}</span>
           <span>ArchiveOS adapter: mock</span>
           <span>seed: 20260626</span>
         </div>

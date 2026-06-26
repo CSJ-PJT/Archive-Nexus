@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PreDestroy;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -34,16 +35,22 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class NexusStateService {
     private final MockArchiveOsClient archiveOsClient;
     private final Random random;
+    private final ExecutorService factoryExecutor;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicLong tick = new AtomicLong(0);
+    private final AtomicInteger lastParallelWorkerCount = new AtomicInteger(0);
 
     private final List<Factory> factories = new ArrayList<>();
     private final List<SensorMetric> sensorMetrics = new CopyOnWriteArrayList<>();
@@ -61,6 +68,7 @@ public class NexusStateService {
     public NexusStateService(MockArchiveOsClient archiveOsClient, @Value("${archive-nexus.simulator.seed}") long seed) {
         this.archiveOsClient = archiveOsClient;
         this.random = new Random(seed);
+        this.factoryExecutor = Executors.newFixedThreadPool(Math.max(3, Runtime.getRuntime().availableProcessors()));
         seedFactories();
         seedInventory();
         generateTick();
@@ -77,7 +85,12 @@ public class NexusStateService {
     }
 
     public SimulatorStatus status() {
-        return new SimulatorStatus(running.get(), tick.get(), factories.size(), alerts.size(), rpaTasks.size(), Instant.now());
+        return new SimulatorStatus(running.get(), tick.get(), factories.size(), alerts.size(), rpaTasks.size(), lastParallelWorkerCount.get(), Instant.now());
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        factoryExecutor.shutdownNow();
     }
 
     @Scheduled(fixedDelayString = "${archive-nexus.simulator.tick-delay-ms}")
@@ -89,7 +102,11 @@ public class NexusStateService {
 
     public void generateTick() {
         long currentTick = tick.incrementAndGet();
-        factories.forEach(factory -> generateFactoryTick(factory, currentTick));
+        List<CompletableFuture<Void>> futures = factories.stream()
+                .map(factory -> CompletableFuture.runAsync(() -> generateFactoryTick(factory, currentTick), factoryExecutor))
+                .toList();
+        futures.forEach(CompletableFuture::join);
+        lastParallelWorkerCount.set(futures.size());
         if (currentTick % 5 == 0) {
             runBatchSnapshot(currentTick);
         }
@@ -102,6 +119,7 @@ public class NexusStateService {
         kpis.put("inventoryTransactions", inventoryTransactions.size());
         kpis.put("logisticsShipments", shipments.size());
         kpis.put("maintenanceEvents", maintenanceEvents.size());
+        kpis.put("parallelWorkerCount", lastParallelWorkerCount.get());
         return new Overview(status(), factories, recentAlerts(), pendingRpaTasks(), kpis);
     }
 
@@ -217,7 +235,7 @@ public class NexusStateService {
         inventoryItems.add(updatedItem);
         inventoryTransactions.add(new InventoryTransaction(id("ITX"), updatedItem.id(), factory.id(), "OUTBOUND", consumed, Instant.now()));
 
-        String shipmentStatus = produced < target * 0.82 || random.nextDouble() < 0.08 ? "DELAYED" : "IN_TRANSIT";
+        String shipmentStatus = produced < target * 0.82 || randomChance(0.08) ? "DELAYED" : "IN_TRANSIT";
         shipments.add(new LogisticsShipment(id("SHP"), factory.id(), "Central Warehouse", shipmentStatus, shipmentStatus.equals("DELAYED") ? 1 : 3));
 
         if (vibration >= machine.vibrationThreshold() || temperature >= machine.temperatureThreshold() || current >= machine.currentThreshold()) {
@@ -307,11 +325,19 @@ public class NexusStateService {
     }
 
     private double anomalySpike(double max) {
-        return random.nextDouble() < 0.12 ? randomRange(max * 0.35, max) : 0;
+        return randomChance(0.12) ? randomRange(max * 0.35, max) : 0;
+    }
+
+    private boolean randomChance(double probability) {
+        synchronized (random) {
+            return random.nextDouble() < probability;
+        }
     }
 
     private double randomRange(double min, double max) {
-        return min + (max - min) * random.nextDouble();
+        synchronized (random) {
+            return min + (max - min) * random.nextDouble();
+        }
     }
 
     private double round(double value) {

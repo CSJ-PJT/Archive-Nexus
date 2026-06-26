@@ -370,6 +370,8 @@ POST /api/simulator/stop
 GET /api/simulator/status
 ```
 
+`GET /api/simulator/status`는 마지막 tick에서 병렬 실행된 factory worker 수를 `parallelWorkerCount`로 반환합니다.
+
 ---
 
 ## Planned Tech Stack

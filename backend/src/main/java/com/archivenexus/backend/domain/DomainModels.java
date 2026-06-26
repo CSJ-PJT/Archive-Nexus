@@ -92,7 +92,7 @@ public final class DomainModels {
     public record BatchSnapshot(long tick, int factoryCount, int productionOrderCount, int totalProducedQuantity, double averageDefectRate, int alertCount, int pendingApprovalCount, Instant createdAt) {
     }
 
-    public record SimulatorStatus(boolean running, long tick, int factoryCount, int alertCount, int rpaTaskCount, Instant updatedAt) {
+    public record SimulatorStatus(boolean running, long tick, int factoryCount, int alertCount, int rpaTaskCount, int parallelWorkerCount, Instant updatedAt) {
     }
 
     public record Overview(SimulatorStatus simulator, List<Factory> factories, List<FactoryAlert> recentAlerts, List<RpaTask> pendingRpaTasks, Map<String, Object> kpis) {

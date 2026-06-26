@@ -4,6 +4,7 @@ export type SimulatorStatus = {
   factoryCount: number;
   alertCount: number;
   rpaTaskCount: number;
+  parallelWorkerCount: number;
   updatedAt: string;
 };
 

@@ -20,6 +20,8 @@
 
 현재 MVP는 `archive-nexus.simulator.tick-delay-ms` 설정값으로 tick을 생성한다. 기본값은 5초이며, `POST /api/simulator/start` 이후 스케줄러가 Codex 개입 없이 계속 데이터를 만든다.
 
+각 tick에서 Factory A/B/C는 executor 기반 worker로 병렬 실행된다. 마지막 tick에서 사용된 worker 수는 `GET /api/simulator/status`의 `parallelWorkerCount`로 확인한다.
+
 ## Batch Snapshot
 
 5 tick마다 Spring Batch 역할의 집계 스냅샷을 만든다.
