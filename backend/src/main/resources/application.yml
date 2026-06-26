@@ -10,7 +10,8 @@ archive-nexus:
   simulator:
     seed: 20260626
     tick-delay-ms: 5000
+    persistence-enabled: true
+    state-file: data/archive-nexus-state.json
 
 server:
   port: 8080
-

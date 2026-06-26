@@ -14,6 +14,7 @@ import com.archivenexus.backend.domain.DomainModels.ProductionOrder;
 import com.archivenexus.backend.domain.DomainModels.QualityInspection;
 import com.archivenexus.backend.domain.DomainModels.RpaTask;
 import com.archivenexus.backend.domain.DomainModels.SensorMetric;
+import com.archivenexus.backend.domain.DomainModels.SimulatorPersistenceStatus;
 import com.archivenexus.backend.domain.DomainModels.SimulatorStatus;
 import com.archivenexus.backend.service.NexusStateService;
 import org.springframework.http.ResponseEntity;
@@ -137,5 +138,10 @@ public class NexusController {
     @GetMapping("/simulator/status")
     SimulatorStatus simulatorStatus() {
         return nexus.status();
+    }
+
+    @GetMapping("/simulator/persistence")
+    SimulatorPersistenceStatus simulatorPersistenceStatus() {
+        return nexus.persistenceStatus();
     }
 }

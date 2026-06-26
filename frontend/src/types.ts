@@ -54,6 +54,13 @@ export type ArchiveOsInteraction = {
   occurredAt: string;
 };
 
+export type SimulatorPersistenceStatus = {
+  enabled: boolean;
+  stateFile: string;
+  snapshotExists: boolean;
+  lastPersistedAt: string | null;
+};
+
 export type Overview = {
   simulator: SimulatorStatus;
   factories: Factory[];

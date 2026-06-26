@@ -1,5 +1,6 @@
 package com.archivenexus.backend.service;
 
+import com.archivenexus.backend.domain.DomainModels.NexusSnapshot;
 import com.archivenexus.backend.archiveos.MockArchiveOsClient;
 import com.archivenexus.backend.domain.DomainModels.AlertSeverity;
 import com.archivenexus.backend.domain.DomainModels.ArchiveOsInteraction;
@@ -20,12 +21,20 @@ import com.archivenexus.backend.domain.DomainModels.QualityInspection;
 import com.archivenexus.backend.domain.DomainModels.RpaTask;
 import com.archivenexus.backend.domain.DomainModels.RpaTaskStatus;
 import com.archivenexus.backend.domain.DomainModels.SensorMetric;
+import com.archivenexus.backend.domain.DomainModels.SimulatorPersistenceStatus;
 import com.archivenexus.backend.domain.DomainModels.SimulatorStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -42,15 +51,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class NexusStateService {
+    private static final Logger log = LoggerFactory.getLogger(NexusStateService.class);
+
     private final MockArchiveOsClient archiveOsClient;
+    private final ObjectMapper objectMapper;
     private final Random random;
     private final ExecutorService factoryExecutor;
+    private final Path stateFile;
+    private final boolean persistenceEnabled;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicLong tick = new AtomicLong(0);
     private final AtomicInteger lastParallelWorkerCount = new AtomicInteger(0);
+    private final AtomicReference<Instant> lastPersistedAt = new AtomicReference<>();
 
     private final List<Factory> factories = new ArrayList<>();
     private final List<SensorMetric> sensorMetrics = new CopyOnWriteArrayList<>();
@@ -65,22 +81,36 @@ public class NexusStateService {
     private final List<RpaTask> rpaTasks = new CopyOnWriteArrayList<>();
     private final List<BatchSnapshot> batchSnapshots = new CopyOnWriteArrayList<>();
 
-    public NexusStateService(MockArchiveOsClient archiveOsClient, @Value("${archive-nexus.simulator.seed}") long seed) {
+    public NexusStateService(
+            MockArchiveOsClient archiveOsClient,
+            ObjectMapper objectMapper,
+            @Value("${archive-nexus.simulator.seed}") long seed,
+            @Value("${archive-nexus.simulator.persistence-enabled:true}") boolean persistenceEnabled,
+            @Value("${archive-nexus.simulator.state-file:data/archive-nexus-state.json}") Path stateFile
+    ) {
         this.archiveOsClient = archiveOsClient;
+        this.objectMapper = objectMapper;
         this.random = new Random(seed);
         this.factoryExecutor = Executors.newFixedThreadPool(Math.max(3, Runtime.getRuntime().availableProcessors()));
-        seedFactories();
-        seedInventory();
-        generateTick();
+        this.persistenceEnabled = persistenceEnabled;
+        this.stateFile = stateFile;
+
+        if (!restoreState()) {
+            seedFactories();
+            seedInventory();
+            generateTick();
+        }
     }
 
     public SimulatorStatus start() {
         running.set(true);
+        persistState();
         return status();
     }
 
     public SimulatorStatus stop() {
         running.set(false);
+        persistState();
         return status();
     }
 
@@ -88,8 +118,13 @@ public class NexusStateService {
         return new SimulatorStatus(running.get(), tick.get(), factories.size(), alerts.size(), rpaTasks.size(), lastParallelWorkerCount.get(), Instant.now());
     }
 
+    public SimulatorPersistenceStatus persistenceStatus() {
+        return new SimulatorPersistenceStatus(persistenceEnabled, stateFile.toString(), Files.exists(stateFile), lastPersistedAt.get());
+    }
+
     @PreDestroy
     public void shutdown() {
+        persistState();
         factoryExecutor.shutdownNow();
     }
 
@@ -110,6 +145,7 @@ public class NexusStateService {
         if (currentTick % 5 == 0) {
             runBatchSnapshot(currentTick);
         }
+        persistState();
     }
 
     public Overview overview() {
@@ -196,8 +232,84 @@ public class NexusStateService {
         current.ifPresent(task -> {
             rpaTasks.remove(task);
             rpaTasks.add(new RpaTask(task.id(), task.factoryId(), status, task.trigger(), task.recommendation(), task.approvalRequired(), task.createdAt()));
+            persistState();
         });
         return rpaTask(id);
+    }
+
+    private boolean restoreState() {
+        if (!persistenceEnabled || !Files.exists(stateFile)) {
+            return false;
+        }
+        try {
+            NexusSnapshot snapshot = objectMapper.readValue(stateFile.toFile(), NexusSnapshot.class);
+            running.set(snapshot.running());
+            tick.set(snapshot.tick());
+            lastParallelWorkerCount.set(snapshot.lastParallelWorkerCount());
+            replace(factories, snapshot.factories());
+            replace(sensorMetrics, snapshot.sensorMetrics());
+            replace(productionOrders, snapshot.productionOrders());
+            replace(lots, snapshot.lots());
+            replace(inspections, snapshot.inspections());
+            replace(inventoryItems, snapshot.inventoryItems());
+            replace(inventoryTransactions, snapshot.inventoryTransactions());
+            replace(shipments, snapshot.shipments());
+            replace(maintenanceEvents, snapshot.maintenanceEvents());
+            replace(alerts, snapshot.alerts());
+            replace(rpaTasks, snapshot.rpaTasks());
+            replace(batchSnapshots, snapshot.batchSnapshots());
+            archiveOsClient.restoreInteractions(snapshot.archiveOsInteractions());
+            lastPersistedAt.set(snapshot.persistedAt());
+            return !factories.isEmpty();
+        } catch (IOException cause) {
+            log.warn("Failed to restore Archive Nexus simulator state from {}", stateFile, cause);
+            return false;
+        }
+    }
+
+    private synchronized void persistState() {
+        if (!persistenceEnabled) {
+            return;
+        }
+        Instant persistedAt = Instant.now();
+        NexusSnapshot snapshot = new NexusSnapshot(
+                running.get(),
+                tick.get(),
+                lastParallelWorkerCount.get(),
+                List.copyOf(factories),
+                List.copyOf(sensorMetrics),
+                List.copyOf(productionOrders),
+                List.copyOf(lots),
+                List.copyOf(inspections),
+                List.copyOf(inventoryItems),
+                List.copyOf(inventoryTransactions),
+                List.copyOf(shipments),
+                List.copyOf(maintenanceEvents),
+                List.copyOf(alerts),
+                List.copyOf(rpaTasks),
+                List.copyOf(batchSnapshots),
+                List.copyOf(archiveOsClient.interactions()),
+                persistedAt
+        );
+        try {
+            Path parent = stateFile.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Path tempFile = stateFile.resolveSibling(stateFile.getFileName() + ".tmp");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile.toFile(), snapshot);
+            Files.move(tempFile, stateFile, StandardCopyOption.REPLACE_EXISTING);
+            lastPersistedAt.set(persistedAt);
+        } catch (IOException cause) {
+            log.warn("Failed to persist Archive Nexus simulator state to {}", stateFile, cause);
+        }
+    }
+
+    private <T> void replace(List<T> target, List<T> source) {
+        target.clear();
+        if (source != null) {
+            target.addAll(source);
+        }
     }
 
     private void generateFactoryTick(Factory factory, long currentTick) {

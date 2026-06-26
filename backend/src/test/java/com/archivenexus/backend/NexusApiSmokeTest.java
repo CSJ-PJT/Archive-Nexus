@@ -13,7 +13,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "archive-nexus.simulator.persistence-enabled=false")
 @AutoConfigureMockMvc
 class NexusApiSmokeTest {
     @Autowired
@@ -42,6 +42,10 @@ class NexusApiSmokeTest {
 
         mvc.perform(get("/api/archiveos/interactions"))
                 .andExpect(status().isOk());
+
+        mvc.perform(get("/api/simulator/persistence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false));
     }
 
     @Test

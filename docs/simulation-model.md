@@ -34,3 +34,15 @@
 - 승인 대기 RPA 수
 
 스냅샷은 `GET /api/batch/snapshots`에서 확인한다.
+
+## Persistence Snapshot
+
+시뮬레이터는 기본적으로 `data/archive-nexus-state.json`에 runtime snapshot을 저장한다.
+
+- tick 번호와 실행 상태
+- 마지막 병렬 worker 수
+- 공장, 센서, 생산, Lot, 품질, 재고, 물류, 정비 데이터
+- Alert, RPA task, Batch snapshot
+- ArchiveOS mock interaction 로그
+
+백엔드가 재시작되면 snapshot을 먼저 로드하고, snapshot이 없거나 손상된 경우에만 seed data로 새 시뮬레이션을 시작한다. 저장 상태는 `GET /api/simulator/persistence`에서 확인한다.

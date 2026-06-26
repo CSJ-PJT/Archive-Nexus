@@ -71,6 +71,13 @@ public class MockArchiveOsClient implements ArchiveOsClient {
         return interactions;
     }
 
+    public void restoreInteractions(List<ArchiveOsInteraction> restoredInteractions) {
+        interactions.clear();
+        if (restoredInteractions != null) {
+            interactions.addAll(restoredInteractions);
+        }
+    }
+
     private void record(String type, String factoryId, String payload) {
         interactions.add(new ArchiveOsInteraction(
                 "AOS-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),

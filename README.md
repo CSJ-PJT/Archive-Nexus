@@ -368,9 +368,11 @@ GET /api/batch/snapshots
 POST /api/simulator/start
 POST /api/simulator/stop
 GET /api/simulator/status
+GET /api/simulator/persistence
 ```
 
 `GET /api/simulator/status`는 마지막 tick에서 병렬 실행된 factory worker 수를 `parallelWorkerCount`로 반환합니다.
+`GET /api/simulator/persistence`는 파일 기반 상태 스냅샷 활성화 여부, 저장 경로, 마지막 저장 시각을 반환합니다.
 
 ---
 

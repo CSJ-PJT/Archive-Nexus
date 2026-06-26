@@ -8,7 +8,9 @@ vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     ? []
     : url.includes('/api/archiveos/interactions')
       ? []
-      : {
+      : url.includes('/api/simulator/persistence')
+        ? { enabled: true, stateFile: 'data/archive-nexus-state.json', snapshotExists: true, lastPersistedAt: new Date().toISOString() }
+        : {
           simulator: { running: true, tick: 1, factoryCount: 3, alertCount: 0, rpaTaskCount: 0, parallelWorkerCount: 3, updatedAt: new Date().toISOString() },
           factories: [],
           recentAlerts: [],

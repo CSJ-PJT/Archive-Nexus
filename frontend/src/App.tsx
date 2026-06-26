@@ -2,7 +2,7 @@ import { Activity, AlertTriangle, Boxes, CheckCircle2, Factory, Gauge, Play, Shi
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import type { ArchiveOsInteraction, BatchSnapshot, Overview } from './types';
+import type { ArchiveOsInteraction, BatchSnapshot, Overview, SimulatorPersistenceStatus } from './types';
 
 const tabs = ['Overview', 'Factories', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
 type Tab = (typeof tabs)[number];
@@ -15,23 +15,33 @@ const fallback: Overview = {
   kpis: {}
 };
 
+const fallbackPersistence: SimulatorPersistenceStatus = {
+  enabled: false,
+  stateFile: '',
+  snapshotExists: false,
+  lastPersistedAt: null
+};
+
 export function App() {
   const [tab, setTab] = useState<Tab>('Overview');
   const [overview, setOverview] = useState<Overview>(fallback);
   const [batchSnapshots, setBatchSnapshots] = useState<BatchSnapshot[]>([]);
   const [archiveOsInteractions, setArchiveOsInteractions] = useState<ArchiveOsInteraction[]>([]);
+  const [persistence, setPersistence] = useState<SimulatorPersistenceStatus>(fallbackPersistence);
   const [error, setError] = useState('');
 
   const load = async () => {
     try {
-      const [nextOverview, nextBatchSnapshots, nextArchiveOsInteractions] = await Promise.all([
+      const [nextOverview, nextBatchSnapshots, nextArchiveOsInteractions, nextPersistence] = await Promise.all([
         api.overview(),
         api.batchSnapshots(),
-        api.archiveOsInteractions()
+        api.archiveOsInteractions(),
+        api.simulatorPersistence()
       ]);
       setOverview(nextOverview);
       setBatchSnapshots(nextBatchSnapshots);
       setArchiveOsInteractions(nextArchiveOsInteractions);
+      setPersistence(nextPersistence);
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'API 연결 실패');
@@ -105,7 +115,7 @@ export function App() {
         {tab === 'Maintenance' && <DomainPanel icon={<Wrench />} title="Maintenance System" rows={['설비 이상', '정비 이력', '예지보전 후보', '고장 위험도']} />}
         {tab === 'Logistics' && <DomainPanel icon={<Truck />} title="Logistics Hub" rows={['출하 상태', '공장 간 이동', '납기 지연', '출하 우선순위']} />}
         {tab === 'RPA' && <RpaPanel overview={overview} reload={load} />}
-        {tab === 'Settings' && <SettingsPanel overview={overview} batchSnapshots={batchSnapshots} archiveOsInteractions={archiveOsInteractions} />}
+        {tab === 'Settings' && <SettingsPanel overview={overview} batchSnapshots={batchSnapshots} archiveOsInteractions={archiveOsInteractions} persistence={persistence} />}
       </section>
     </main>
   );
@@ -179,7 +189,7 @@ function RpaPanel({ overview, reload }: { overview: Overview; reload: () => Prom
   );
 }
 
-function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions }: { overview: Overview; batchSnapshots: BatchSnapshot[]; archiveOsInteractions: ArchiveOsInteraction[] }) {
+function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions, persistence }: { overview: Overview; batchSnapshots: BatchSnapshot[]; archiveOsInteractions: ArchiveOsInteraction[]; persistence: SimulatorPersistenceStatus }) {
   const latestSnapshot = batchSnapshots[batchSnapshots.length - 1];
   const latestInteractions = archiveOsInteractions.slice(-5).reverse();
 
@@ -192,6 +202,10 @@ function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions }: { ov
           <span>데이터 생성 주기: 5초</span>
           <span>병렬 factory worker: {overview.simulator.parallelWorkerCount}</span>
           <span>ArchiveOS adapter: mock</span>
+          <span>persistence: {persistence.enabled ? 'enabled' : 'disabled'}</span>
+          <span>snapshot: {persistence.snapshotExists ? 'available' : 'not created'}</span>
+          <span>state file: {persistence.stateFile || '-'}</span>
+          <span>last persisted: {persistence.lastPersistedAt ?? '-'}</span>
           <span>seed: 20260626</span>
         </div>
       </div>
