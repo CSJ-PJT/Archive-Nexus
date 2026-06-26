@@ -1,6 +1,11 @@
-import type { ArchiveOsInteraction, BatchSnapshot, Factory, FactoryAlert, Overview, RpaTask, SimulatorPersistenceStatus, SimulatorStatus } from './types';
+import type {
+  ArchiveOsInteraction, BatchSnapshot, Factory, FactoryAlert, InventoryItem,
+  InventoryTransaction, LogisticsShipment, MaintenanceEvent, Overview,
+  ProductionOrder, QualityInspection, RpaTask, SimulatorPersistenceStatus,
+  SimulatorStatus
+} from './types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init);
@@ -19,6 +24,12 @@ export const api = {
   startSimulator: () => request<SimulatorStatus>('/api/simulator/start', { method: 'POST' }),
   stopSimulator: () => request<SimulatorStatus>('/api/simulator/stop', { method: 'POST' }),
   simulatorPersistence: () => request<SimulatorPersistenceStatus>('/api/simulator/persistence'),
+  productionOrders: () => request<ProductionOrder[]>('/api/production/orders'),
+  qualityInspections: () => request<QualityInspection[]>('/api/quality/inspections'),
+  inventoryItems: () => request<InventoryItem[]>('/api/inventory/items'),
+  inventoryTransactions: () => request<InventoryTransaction[]>('/api/inventory/transactions'),
+  logisticsShipments: () => request<LogisticsShipment[]>('/api/logistics/shipments'),
+  maintenanceEvents: () => request<MaintenanceEvent[]>('/api/maintenance/events'),
   approveRpa: (id: string) => request<RpaTask>(`/api/rpa/tasks/${id}/approve`, { method: 'POST' }),
   rejectRpa: (id: string) => request<RpaTask>(`/api/rpa/tasks/${id}/reject`, { method: 'POST' }),
   batchSnapshots: () => request<BatchSnapshot[]>('/api/batch/snapshots'),

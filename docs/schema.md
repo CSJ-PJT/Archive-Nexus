@@ -2,6 +2,8 @@
 
 Archive Nexus keeps the existing domain schema for factory, production, quality, inventory, logistics, maintenance, RPA, batch, and ArchiveOS interaction data.
 
+Schema changes are managed by Flyway migrations under `backend/src/main/resources/db/migration`. `V1__initialize_archive_nexus_schema.sql` is idempotent so it supports both a new database and a pre-Flyway local volume. For an existing non-empty schema, Flyway records baseline version `0` and then applies V1 without deleting data.
+
 For simulator runtime recovery, the operational persistence table is `simulator_state`.
 
 ## simulator_state

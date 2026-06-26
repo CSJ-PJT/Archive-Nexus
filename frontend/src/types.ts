@@ -35,6 +35,57 @@ export type RpaTask = {
   createdAt: string;
 };
 
+export type ProductionOrder = {
+  id: string;
+  factoryId: string;
+  product: string;
+  targetQuantity: number;
+  producedQuantity: number;
+  status: string;
+};
+
+export type QualityInspection = {
+  id: string;
+  lotId: string;
+  factoryId: string;
+  defectRate: number;
+  result: string;
+};
+
+export type InventoryItem = {
+  id: string;
+  name: string;
+  type: string;
+  quantity: number;
+  safetyStock: number;
+};
+
+export type InventoryTransaction = {
+  id: string;
+  itemId: string;
+  factoryId: string;
+  type: string;
+  quantity: number;
+  occurredAt: string;
+};
+
+export type LogisticsShipment = {
+  id: string;
+  factoryId: string;
+  destination: string;
+  status: string;
+  priority: number;
+};
+
+export type MaintenanceEvent = {
+  id: string;
+  factoryId: string;
+  machineId: string;
+  severity: FactoryAlert['severity'];
+  cause: string;
+  status: string;
+};
+
 export type BatchSnapshot = {
   tick: number;
   factoryCount: number;

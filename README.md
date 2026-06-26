@@ -379,6 +379,22 @@ GET /api/simulator/persistence
 
 ---
 
+## Operations Dashboard
+
+React 운영 대시보드는 5초마다 제조 도메인 API를 병렬 조회하여 하나의 관제 화면으로 구성합니다.
+
+- Overview: 시뮬레이터 상태, 생산 달성률, 평균 불량률, 재고 위험, 출하 지연, 최근 이상 이벤트
+- Factories: 공장별 생산·품질·물류·정비·경보 상태
+- Production / Inventory / Quality / Maintenance / Logistics: 실제 시뮬레이터 데이터 테이블
+- RPA: 전체 작업 이력과 `APPROVAL_REQUIRED` 작업 승인·반려
+- Settings: PostgreSQL/파일 백업 상태, Batch snapshot, ArchiveOS 상호작용 이력
+
+API 일부가 실패하면 마지막 정상 데이터를 유지하고 상단 오류 영역에 실패 상태를 표시합니다. 수동 새로고침과 simulator start/stop 작업도 동일한 오류 처리 경로를 사용합니다. 상세 계약은 [`docs/operations-dashboard.md`](docs/operations-dashboard.md)를 참고합니다.
+
+PostgreSQL schema는 Flyway로 관리합니다. 기존 로컬 볼륨도 삭제하지 않고 baseline version `0` 이후 최신 migration을 적용하며, Docker Compose backend는 PostgreSQL healthcheck 통과 후 시작합니다. 프론트엔드는 Nginx의 동일 출처 `/api` reverse proxy를 통해 backend에 접근합니다.
+
+---
+
 ## Planned Tech Stack
 
 ### Backend
@@ -431,20 +447,23 @@ GET /api/simulator/persistence
 
 ## Roadmap
 
-- [ ] 프로젝트 기본 구조 생성
-- [ ] Spring Boot backend 생성
-- [ ] React frontend 생성
-- [ ] PostgreSQL schema 작성
-- [ ] Factory A/B/C seed data 생성
-- [ ] simulator start/stop 구현
-- [ ] 생산 데이터 자동 생성
-- [ ] 재고 시스템 구현
-- [ ] 품질 검사 시스템 구현
-- [ ] 설비 이상 이벤트 구현
-- [ ] RPA task 생성 로직 구현
-- [ ] ArchiveOS mock adapter 구현
+- [x] 프로젝트 기본 구조 생성
+- [x] Spring Boot backend 생성
+- [x] React frontend 생성
+- [x] PostgreSQL schema 작성
+- [x] Factory A/B/C seed data 생성
+- [x] simulator start/stop 구현
+- [x] 생산 데이터 자동 생성
+- [x] 재고 시스템 구현
+- [x] 품질 검사 시스템 구현
+- [x] 설비 이상 이벤트 구현
+- [x] RPA task 생성 로직 구현
+- [x] ArchiveOS mock adapter 구현
 - [ ] ArchiveOS 실제 연동
-- [ ] Docker Compose 실행 환경 구성
+- [x] Docker Compose 실행 환경 구성
+- [x] 제조 운영 대시보드 구성
+- [ ] 운영 모니터링 및 감사 로그 고도화
+- [ ] 사용자 인증 및 역할 기반 권한 구성
 - [ ] 화면 캡처 및 운영 문서 작성
 
 ---
