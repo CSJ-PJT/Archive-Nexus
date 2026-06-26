@@ -2,6 +2,8 @@ package com.archivenexus.backend.web;
 
 import com.archivenexus.backend.domain.DomainModels.Factory;
 import com.archivenexus.backend.domain.DomainModels.FactoryAlert;
+import com.archivenexus.backend.domain.DomainModels.ArchiveOsInteraction;
+import com.archivenexus.backend.domain.DomainModels.BatchSnapshot;
 import com.archivenexus.backend.domain.DomainModels.InventoryItem;
 import com.archivenexus.backend.domain.DomainModels.InventoryTransaction;
 import com.archivenexus.backend.domain.DomainModels.LogisticsShipment;
@@ -100,6 +102,16 @@ public class NexusController {
     @GetMapping("/rpa/tasks/{id}")
     ResponseEntity<RpaTask> rpaTask(@PathVariable String id) {
         return ResponseEntity.of(nexus.rpaTask(id));
+    }
+
+    @GetMapping("/batch/snapshots")
+    List<BatchSnapshot> batchSnapshots() {
+        return nexus.batchSnapshots();
+    }
+
+    @GetMapping("/archiveos/interactions")
+    List<ArchiveOsInteraction> archiveOsInteractions() {
+        return nexus.archiveOsInteractions();
     }
 
     @PostMapping("/rpa/tasks/{id}/approve")

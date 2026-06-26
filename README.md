@@ -355,6 +355,13 @@ POST /api/rpa/tasks/{id}/approve
 POST /api/rpa/tasks/{id}/reject
 ```
 
+### ArchiveOS / Batch
+
+```http
+GET /api/archiveos/interactions
+GET /api/batch/snapshots
+```
+
 ### Simulator
 
 ```http

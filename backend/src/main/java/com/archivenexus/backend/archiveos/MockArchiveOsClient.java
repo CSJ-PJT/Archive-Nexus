@@ -1,6 +1,7 @@
 package com.archivenexus.backend.archiveos;
 
 import com.archivenexus.backend.domain.DomainModels.AlertSeverity;
+import com.archivenexus.backend.domain.DomainModels.ArchiveOsInteraction;
 import com.archivenexus.backend.domain.DomainModels.FactoryAlert;
 import com.archivenexus.backend.domain.DomainModels.RpaTask;
 import com.archivenexus.backend.domain.DomainModels.RpaTaskStatus;
@@ -9,15 +10,20 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Component
 public class MockArchiveOsClient implements ArchiveOsClient {
+    private final List<ArchiveOsInteraction> interactions = new CopyOnWriteArrayList<>();
+
     @Override
     public void sendEvent(FactoryAlert alert) {
+        record("SEND_EVENT", alert.factoryId(), alert.category() + ":" + alert.message());
     }
 
     @Override
     public List<String> requestRagAnalysis(FactoryAlert alert) {
+        record("RAG_SEARCH", alert.factoryId(), alert.category());
         return switch (alert.category()) {
             case "QUALITY" -> List.of("품질 Lot 검사 기준서", "출하 보류 및 재작업 절차");
             case "MAINTENANCE" -> List.of("예지보전 진동/온도 임계치", "설비 정비 작업 표준서");
@@ -29,6 +35,7 @@ public class MockArchiveOsClient implements ArchiveOsClient {
 
     @Override
     public RpaTask createRpaTask(FactoryAlert alert, String recommendation, boolean approvalRequired) {
+        record("RPA_TASK_CREATE", alert.factoryId(), recommendation);
         return new RpaTask(
                 "RPA-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
                 alert.factoryId(),
@@ -42,18 +49,35 @@ public class MockArchiveOsClient implements ArchiveOsClient {
 
     @Override
     public RpaTask updateRpaStatus(String taskId, String status) {
+        record("RPA_STATUS_UPDATE", null, taskId + ":" + status);
         return null;
     }
 
     @Override
     public void requestApproval(RpaTask task) {
+        record("APPROVAL_REQUEST", task.factoryId(), task.id());
     }
 
     @Override
     public void publishAlert(FactoryAlert alert) {
+        record("ALERT_PUBLISH", alert.factoryId(), alert.message());
     }
 
     public boolean requiresApproval(FactoryAlert alert) {
         return alert.severity() == AlertSeverity.CRITICAL;
+    }
+
+    public List<ArchiveOsInteraction> interactions() {
+        return interactions;
+    }
+
+    private void record(String type, String factoryId, String payload) {
+        interactions.add(new ArchiveOsInteraction(
+                "AOS-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
+                type,
+                factoryId,
+                payload,
+                Instant.now()
+        ));
     }
 }

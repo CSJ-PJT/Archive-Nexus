@@ -15,6 +15,17 @@ Archive Nexus는 ArchiveOS를 직접 포함하지 않는다. `ArchiveOsClient` i
 
 초기 MVP에서는 `MockArchiveOsClient`가 RAG 근거와 RPA Task 생성을 대체한다. 실제 ArchiveOS API가 준비되면 동일 interface를 구현하는 HTTP 또는 SDK adapter를 추가한다.
 
+Mock adapter는 다음 상호작용을 `GET /api/archiveos/interactions`로 노출한다.
+
+- `SEND_EVENT`
+- `ALERT_PUBLISH`
+- `RAG_SEARCH`
+- `RPA_TASK_CREATE`
+- `APPROVAL_REQUEST`
+- `RPA_STATUS_UPDATE`
+
+정상 생산, 재고, 품질, 물류 데이터는 이 로그를 만들지 않는다. 이상 감지로 `FactoryAlert`가 생성된 경우에만 ArchiveOS 상호작용이 기록된다.
+
 ## 향후 연동
 
 - ArchiveOS AI Runtime 분석 요청
@@ -22,4 +33,3 @@ Archive Nexus는 ArchiveOS를 직접 포함하지 않는다. `ArchiveOsClient` i
 - RAG index 기반 작업 표준서 검색
 - Approval Gate 승인/반려 webhook
 - RPA 실행 결과와 재시도 로그 저장
-

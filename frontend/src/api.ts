@@ -1,4 +1,4 @@
-import type { Factory, FactoryAlert, Overview, RpaTask, SimulatorStatus } from './types';
+import type { ArchiveOsInteraction, BatchSnapshot, Factory, FactoryAlert, Overview, RpaTask, SimulatorStatus } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080';
 
@@ -19,5 +19,7 @@ export const api = {
   startSimulator: () => request<SimulatorStatus>('/api/simulator/start', { method: 'POST' }),
   stopSimulator: () => request<SimulatorStatus>('/api/simulator/stop', { method: 'POST' }),
   approveRpa: (id: string) => request<RpaTask>(`/api/rpa/tasks/${id}/approve`, { method: 'POST' }),
-  rejectRpa: (id: string) => request<RpaTask>(`/api/rpa/tasks/${id}/reject`, { method: 'POST' })
+  rejectRpa: (id: string) => request<RpaTask>(`/api/rpa/tasks/${id}/reject`, { method: 'POST' }),
+  batchSnapshots: () => request<BatchSnapshot[]>('/api/batch/snapshots'),
+  archiveOsInteractions: () => request<ArchiveOsInteraction[]>('/api/archiveos/interactions')
 };

@@ -34,6 +34,25 @@ export type RpaTask = {
   createdAt: string;
 };
 
+export type BatchSnapshot = {
+  tick: number;
+  factoryCount: number;
+  productionOrderCount: number;
+  totalProducedQuantity: number;
+  averageDefectRate: number;
+  alertCount: number;
+  pendingApprovalCount: number;
+  createdAt: string;
+};
+
+export type ArchiveOsInteraction = {
+  id: string;
+  type: string;
+  factoryId: string | null;
+  payload: string;
+  occurredAt: string;
+};
+
 export type Overview = {
   simulator: SimulatorStatus;
   factories: Factory[];

@@ -86,6 +86,12 @@ public final class DomainModels {
     public record RpaExecutionLog(String id, String rpaTaskId, String message, Instant loggedAt) {
     }
 
+    public record ArchiveOsInteraction(String id, String type, String factoryId, String payload, Instant occurredAt) {
+    }
+
+    public record BatchSnapshot(long tick, int factoryCount, int productionOrderCount, int totalProducedQuantity, double averageDefectRate, int alertCount, int pendingApprovalCount, Instant createdAt) {
+    }
+
     public record SimulatorStatus(boolean running, long tick, int factoryCount, int alertCount, int rpaTaskCount, Instant updatedAt) {
     }
 

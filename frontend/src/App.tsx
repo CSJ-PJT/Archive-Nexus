@@ -2,7 +2,7 @@ import { Activity, AlertTriangle, Boxes, CheckCircle2, Factory, Gauge, Play, Shi
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
-import type { Overview } from './types';
+import type { ArchiveOsInteraction, BatchSnapshot, Overview } from './types';
 
 const tabs = ['Overview', 'Factories', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
 type Tab = (typeof tabs)[number];
@@ -18,11 +18,20 @@ const fallback: Overview = {
 export function App() {
   const [tab, setTab] = useState<Tab>('Overview');
   const [overview, setOverview] = useState<Overview>(fallback);
+  const [batchSnapshots, setBatchSnapshots] = useState<BatchSnapshot[]>([]);
+  const [archiveOsInteractions, setArchiveOsInteractions] = useState<ArchiveOsInteraction[]>([]);
   const [error, setError] = useState('');
 
   const load = async () => {
     try {
-      setOverview(await api.overview());
+      const [nextOverview, nextBatchSnapshots, nextArchiveOsInteractions] = await Promise.all([
+        api.overview(),
+        api.batchSnapshots(),
+        api.archiveOsInteractions()
+      ]);
+      setOverview(nextOverview);
+      setBatchSnapshots(nextBatchSnapshots);
+      setArchiveOsInteractions(nextArchiveOsInteractions);
       setError('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'API 연결 실패');
@@ -95,7 +104,7 @@ export function App() {
         {tab === 'Maintenance' && <DomainPanel icon={<Wrench />} title="Maintenance System" rows={['설비 이상', '정비 이력', '예지보전 후보', '고장 위험도']} />}
         {tab === 'Logistics' && <DomainPanel icon={<Truck />} title="Logistics Hub" rows={['출하 상태', '공장 간 이동', '납기 지연', '출하 우선순위']} />}
         {tab === 'RPA' && <RpaPanel overview={overview} reload={load} />}
-        {tab === 'Settings' && <SettingsPanel overview={overview} />}
+        {tab === 'Settings' && <SettingsPanel overview={overview} batchSnapshots={batchSnapshots} archiveOsInteractions={archiveOsInteractions} />}
       </section>
     </main>
   );
@@ -169,15 +178,41 @@ function RpaPanel({ overview, reload }: { overview: Overview; reload: () => Prom
   );
 }
 
-function SettingsPanel({ overview }: { overview: Overview }) {
+function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions }: { overview: Overview; batchSnapshots: BatchSnapshot[]; archiveOsInteractions: ArchiveOsInteraction[] }) {
+  const latestSnapshot = batchSnapshots[batchSnapshots.length - 1];
+  const latestInteractions = archiveOsInteractions.slice(-5).reverse();
+
   return (
-    <div className="panel wide">
-      <h2>시뮬레이터 설정</h2>
-      <div className="rows">
-        <span>상태: {overview.simulator.running ? '실행 중' : '정지'}</span>
-        <span>데이터 생성 주기: 5초</span>
-        <span>ArchiveOS adapter: mock</span>
-        <span>seed: 20260626</span>
+    <div className="grid">
+      <div className="panel">
+        <h2>시뮬레이터 설정</h2>
+        <div className="rows">
+          <span>상태: {overview.simulator.running ? '실행 중' : '정지'}</span>
+          <span>데이터 생성 주기: 5초</span>
+          <span>ArchiveOS adapter: mock</span>
+          <span>seed: 20260626</span>
+        </div>
+      </div>
+      <div className="panel">
+        <h2>Batch Snapshot</h2>
+        <div className="rows">
+          <span>스냅샷 수: {batchSnapshots.length}</span>
+          <span>최근 tick: {latestSnapshot?.tick ?? 0}</span>
+          <span>평균 불량률: {latestSnapshot?.averageDefectRate ?? 0}</span>
+          <span>승인 대기: {latestSnapshot?.pendingApprovalCount ?? 0}</span>
+        </div>
+      </div>
+      <div className="panel wide">
+        <h2>ArchiveOS Interactions</h2>
+        <div className="event-list">
+          {latestInteractions.map((item) => (
+            <article key={item.id}>
+              <span className="badge info">{item.type}</span>
+              <strong>{item.factoryId ?? 'ArchiveOS'} · {item.id}</strong>
+              <p>{item.payload}</p>
+            </article>
+          ))}
+        </div>
       </div>
     </div>
   );

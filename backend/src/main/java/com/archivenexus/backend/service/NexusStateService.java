@@ -2,6 +2,8 @@ package com.archivenexus.backend.service;
 
 import com.archivenexus.backend.archiveos.MockArchiveOsClient;
 import com.archivenexus.backend.domain.DomainModels.AlertSeverity;
+import com.archivenexus.backend.domain.DomainModels.ArchiveOsInteraction;
+import com.archivenexus.backend.domain.DomainModels.BatchSnapshot;
 import com.archivenexus.backend.domain.DomainModels.Factory;
 import com.archivenexus.backend.domain.DomainModels.FactoryAlert;
 import com.archivenexus.backend.domain.DomainModels.FactoryKind;
@@ -54,6 +56,7 @@ public class NexusStateService {
     private final List<MaintenanceEvent> maintenanceEvents = new CopyOnWriteArrayList<>();
     private final List<FactoryAlert> alerts = new CopyOnWriteArrayList<>();
     private final List<RpaTask> rpaTasks = new CopyOnWriteArrayList<>();
+    private final List<BatchSnapshot> batchSnapshots = new CopyOnWriteArrayList<>();
 
     public NexusStateService(MockArchiveOsClient archiveOsClient, @Value("${archive-nexus.simulator.seed}") long seed) {
         this.archiveOsClient = archiveOsClient;
@@ -87,6 +90,9 @@ public class NexusStateService {
     public void generateTick() {
         long currentTick = tick.incrementAndGet();
         factories.forEach(factory -> generateFactoryTick(factory, currentTick));
+        if (currentTick % 5 == 0) {
+            runBatchSnapshot(currentTick);
+        }
     }
 
     public Overview overview() {
@@ -145,6 +151,14 @@ public class NexusStateService {
 
     public List<RpaTask> rpaTasks() {
         return rpaTasks;
+    }
+
+    public List<BatchSnapshot> batchSnapshots() {
+        return batchSnapshots;
+    }
+
+    public List<ArchiveOsInteraction> archiveOsInteractions() {
+        return archiveOsClient.interactions();
     }
 
     public Optional<RpaTask> rpaTask(String id) {
@@ -234,6 +248,25 @@ public class NexusStateService {
         if (approvalRequired) {
             archiveOsClient.requestApproval(task);
         }
+    }
+
+    private void runBatchSnapshot(long currentTick) {
+        int totalProduced = productionOrders.stream().mapToInt(ProductionOrder::producedQuantity).sum();
+        double averageDefectRate = inspections.stream()
+                .mapToDouble(QualityInspection::defectRate)
+                .average()
+                .orElse(0);
+        int pendingApprovalCount = pendingRpaTasks().size();
+        batchSnapshots.add(new BatchSnapshot(
+                currentTick,
+                factories.size(),
+                productionOrders.size(),
+                totalProduced,
+                round(averageDefectRate),
+                alerts.size(),
+                pendingApprovalCount,
+                Instant.now()
+        ));
     }
 
     private List<RpaTask> pendingRpaTasks() {
