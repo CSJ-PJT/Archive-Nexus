@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: archive-nexus-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-archive_nexus}
+      POSTGRES_USER: ${POSTGRES_USER:-archive_nexus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-archive_nexus_local}
+    ports:
+      - "55432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+
+  archive-nexus-backend:
+    build:
+      context: ./backend
+    container_name: archive-nexus-backend
+    environment:
+      ARCHIVEOS_BASE_URL: ${ARCHIVEOS_BASE_URL:-http://host.docker.internal:8090}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+  archive-nexus-frontend:
+    build:
+      context: ./frontend
+    container_name: archive-nexus-frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "15173:80"
+    depends_on:
+      - archive-nexus-backend
+
+volumes:
+  postgres-data:

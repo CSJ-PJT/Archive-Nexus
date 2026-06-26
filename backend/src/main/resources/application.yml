@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: archive-nexus-backend
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+
+archive-nexus:
+  simulator:
+    seed: 20260626
+    tick-delay-ms: 5000
+
+server:
+  port: 8080
+
