@@ -23,6 +23,7 @@ import com.archivenexus.backend.domain.DomainModels.RpaTaskStatus;
 import com.archivenexus.backend.domain.DomainModels.SensorMetric;
 import com.archivenexus.backend.domain.DomainModels.SimulatorPersistenceStatus;
 import com.archivenexus.backend.domain.DomainModels.SimulatorStatus;
+import com.archivenexus.backend.persistence.SimulatorStateStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +60,7 @@ public class NexusStateService {
 
     private final MockArchiveOsClient archiveOsClient;
     private final ObjectMapper objectMapper;
+    private final SimulatorStateStore simulatorStateStore;
     private final Random random;
     private final ExecutorService factoryExecutor;
     private final Path stateFile;
@@ -67,6 +69,7 @@ public class NexusStateService {
     private final AtomicLong tick = new AtomicLong(0);
     private final AtomicInteger lastParallelWorkerCount = new AtomicInteger(0);
     private final AtomicReference<Instant> lastPersistedAt = new AtomicReference<>();
+    private final AtomicReference<String> restoredFrom = new AtomicReference<>("seed");
 
     private final List<Factory> factories = new ArrayList<>();
     private final List<SensorMetric> sensorMetrics = new CopyOnWriteArrayList<>();
@@ -83,12 +86,14 @@ public class NexusStateService {
 
     public NexusStateService(
             MockArchiveOsClient archiveOsClient,
+            SimulatorStateStore simulatorStateStore,
             ObjectMapper objectMapper,
             @Value("${archive-nexus.simulator.seed}") long seed,
             @Value("${archive-nexus.simulator.persistence-enabled:true}") boolean persistenceEnabled,
             @Value("${archive-nexus.simulator.state-file:data/archive-nexus-state.json}") Path stateFile
     ) {
         this.archiveOsClient = archiveOsClient;
+        this.simulatorStateStore = simulatorStateStore;
         this.objectMapper = objectMapper;
         this.random = new Random(seed);
         this.factoryExecutor = Executors.newFixedThreadPool(Math.max(3, Runtime.getRuntime().availableProcessors()));
@@ -119,7 +124,22 @@ public class NexusStateService {
     }
 
     public SimulatorPersistenceStatus persistenceStatus() {
-        return new SimulatorPersistenceStatus(persistenceEnabled, stateFile.toString(), Files.exists(stateFile), lastPersistedAt.get());
+        boolean dbAvailable = simulatorStateStore != null && simulatorStateStore.dbAvailable();
+        boolean fileSnapshotAvailable = Files.exists(stateFile);
+        Instant dbSavedAt = simulatorStateStore == null ? null : simulatorStateStore.lastSavedAt();
+        Instant lastSavedAt = dbSavedAt != null ? dbSavedAt : lastPersistedAt.get();
+        String storageMode = !persistenceEnabled ? "disabled" : dbAvailable ? "postgresql" : "file-backup";
+        return new SimulatorPersistenceStatus(
+                persistenceEnabled,
+                storageMode,
+                dbAvailable,
+                fileSnapshotAvailable,
+                fileSnapshotAvailable,
+                stateFile.toString(),
+                lastSavedAt,
+                lastSavedAt,
+                restoredFrom.get()
+        );
     }
 
     @PreDestroy
@@ -238,29 +258,28 @@ public class NexusStateService {
     }
 
     private boolean restoreState() {
-        if (!persistenceEnabled || !Files.exists(stateFile)) {
+        if (!persistenceEnabled) {
+            return false;
+        }
+
+        if (simulatorStateStore != null) {
+            Optional<NexusSnapshot> databaseSnapshot = simulatorStateStore.restore();
+            if (databaseSnapshot.isPresent() && applySnapshot(databaseSnapshot.get())) {
+                restoredFrom.set("postgresql");
+                return true;
+            }
+        }
+
+        if (!Files.exists(stateFile)) {
             return false;
         }
         try {
             NexusSnapshot snapshot = objectMapper.readValue(stateFile.toFile(), NexusSnapshot.class);
-            running.set(snapshot.running());
-            tick.set(snapshot.tick());
-            lastParallelWorkerCount.set(snapshot.lastParallelWorkerCount());
-            replace(factories, snapshot.factories());
-            replace(sensorMetrics, snapshot.sensorMetrics());
-            replace(productionOrders, snapshot.productionOrders());
-            replace(lots, snapshot.lots());
-            replace(inspections, snapshot.inspections());
-            replace(inventoryItems, snapshot.inventoryItems());
-            replace(inventoryTransactions, snapshot.inventoryTransactions());
-            replace(shipments, snapshot.shipments());
-            replace(maintenanceEvents, snapshot.maintenanceEvents());
-            replace(alerts, snapshot.alerts());
-            replace(rpaTasks, snapshot.rpaTasks());
-            replace(batchSnapshots, snapshot.batchSnapshots());
-            archiveOsClient.restoreInteractions(snapshot.archiveOsInteractions());
-            lastPersistedAt.set(snapshot.persistedAt());
-            return !factories.isEmpty();
+            boolean restored = applySnapshot(snapshot);
+            if (restored) {
+                restoredFrom.set("file");
+            }
+            return restored;
         } catch (IOException cause) {
             log.warn("Failed to restore Archive Nexus simulator state from {}", stateFile, cause);
             return false;
@@ -272,25 +291,36 @@ public class NexusStateService {
             return;
         }
         Instant persistedAt = Instant.now();
-        NexusSnapshot snapshot = new NexusSnapshot(
-                running.get(),
-                tick.get(),
-                lastParallelWorkerCount.get(),
-                List.copyOf(factories),
-                List.copyOf(sensorMetrics),
-                List.copyOf(productionOrders),
-                List.copyOf(lots),
-                List.copyOf(inspections),
-                List.copyOf(inventoryItems),
-                List.copyOf(inventoryTransactions),
-                List.copyOf(shipments),
-                List.copyOf(maintenanceEvents),
-                List.copyOf(alerts),
-                List.copyOf(rpaTasks),
-                List.copyOf(batchSnapshots),
-                List.copyOf(archiveOsClient.interactions()),
-                persistedAt
+        NexusSnapshot snapshot = snapshot(persistedAt);
+        if (simulatorStateStore != null) {
+            simulatorStateStore.save(snapshot);
+        }
+        persistFileSnapshot(snapshot);
+    }
+
+    private NexusSnapshot snapshot(Instant persistedAt) {
+        return new NexusSnapshot(
+            running.get(),
+            tick.get(),
+            lastParallelWorkerCount.get(),
+            List.copyOf(factories),
+            List.copyOf(sensorMetrics),
+            List.copyOf(productionOrders),
+            List.copyOf(lots),
+            List.copyOf(inspections),
+            List.copyOf(inventoryItems),
+            List.copyOf(inventoryTransactions),
+            List.copyOf(shipments),
+            List.copyOf(maintenanceEvents),
+            List.copyOf(alerts),
+            List.copyOf(rpaTasks),
+            List.copyOf(batchSnapshots),
+            List.copyOf(archiveOsClient.interactions()),
+            persistedAt
         );
+    }
+
+    private void persistFileSnapshot(NexusSnapshot snapshot) {
         try {
             Path parent = stateFile.toAbsolutePath().getParent();
             if (parent != null) {
@@ -299,10 +329,31 @@ public class NexusStateService {
             Path tempFile = stateFile.resolveSibling(stateFile.getFileName() + ".tmp");
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(tempFile.toFile(), snapshot);
             Files.move(tempFile, stateFile, StandardCopyOption.REPLACE_EXISTING);
-            lastPersistedAt.set(persistedAt);
+            lastPersistedAt.set(snapshot.persistedAt());
         } catch (IOException cause) {
             log.warn("Failed to persist Archive Nexus simulator state to {}", stateFile, cause);
         }
+    }
+
+    private boolean applySnapshot(NexusSnapshot snapshot) {
+        running.set(snapshot.running());
+        tick.set(snapshot.tick());
+        lastParallelWorkerCount.set(snapshot.lastParallelWorkerCount());
+        replace(factories, snapshot.factories());
+        replace(sensorMetrics, snapshot.sensorMetrics());
+        replace(productionOrders, snapshot.productionOrders());
+        replace(lots, snapshot.lots());
+        replace(inspections, snapshot.inspections());
+        replace(inventoryItems, snapshot.inventoryItems());
+        replace(inventoryTransactions, snapshot.inventoryTransactions());
+        replace(shipments, snapshot.shipments());
+        replace(maintenanceEvents, snapshot.maintenanceEvents());
+        replace(alerts, snapshot.alerts());
+        replace(rpaTasks, snapshot.rpaTasks());
+        replace(batchSnapshots, snapshot.batchSnapshots());
+        archiveOsClient.restoreInteractions(snapshot.archiveOsInteractions());
+        lastPersistedAt.set(snapshot.persistedAt());
+        return !factories.isEmpty();
     }
 
     private <T> void replace(List<T> target, List<T> source) {

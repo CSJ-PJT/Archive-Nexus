@@ -18,6 +18,9 @@ services:
     container_name: archive-nexus-backend
     environment:
       ARCHIVEOS_BASE_URL: ${ARCHIVEOS_BASE_URL:-http://host.docker.internal:8090}
+      ARCHIVE_NEXUS_DB_URL: ${ARCHIVE_NEXUS_DB_URL:-jdbc:postgresql://postgres:5432/archive_nexus}
+      ARCHIVE_NEXUS_DB_USERNAME: ${POSTGRES_USER:-archive_nexus}
+      ARCHIVE_NEXUS_DB_PASSWORD: ${POSTGRES_PASSWORD:-archive_nexus_local}
     ports:
       - "8080:8080"
     depends_on:

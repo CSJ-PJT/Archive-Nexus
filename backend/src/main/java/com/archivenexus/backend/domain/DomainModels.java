@@ -113,7 +113,17 @@ public final class DomainModels {
     ) {
     }
 
-    public record SimulatorPersistenceStatus(boolean enabled, String stateFile, boolean snapshotExists, Instant lastPersistedAt) {
+    public record SimulatorPersistenceStatus(
+            boolean enabled,
+            String storageMode,
+            boolean dbAvailable,
+            boolean fileSnapshotAvailable,
+            boolean snapshotExists,
+            String stateFile,
+            Instant lastSavedAt,
+            Instant lastPersistedAt,
+            String restoredFrom
+    ) {
     }
 
     public record SimulatorStatus(boolean running, long tick, int factoryCount, int alertCount, int rpaTaskCount, int parallelWorkerCount, Instant updatedAt) {

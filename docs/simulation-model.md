@@ -37,7 +37,7 @@
 
 ## Persistence Snapshot
 
-시뮬레이터는 기본적으로 `data/archive-nexus-state.json`에 runtime snapshot을 저장한다.
+시뮬레이터는 기본적으로 PostgreSQL `simulator_state` 테이블에 runtime snapshot을 저장한다. `data/archive-nexus-state.json`은 DB 저장 실패나 local backup이 필요한 경우를 위한 fallback snapshot으로 유지한다.
 
 - tick 번호와 실행 상태
 - 마지막 병렬 worker 수
@@ -45,4 +45,4 @@
 - Alert, RPA task, Batch snapshot
 - ArchiveOS mock interaction 로그
 
-백엔드가 재시작되면 snapshot을 먼저 로드하고, snapshot이 없거나 손상된 경우에만 seed data로 새 시뮬레이션을 시작한다. 저장 상태는 `GET /api/simulator/persistence`에서 확인한다.
+백엔드가 재시작되면 PostgreSQL snapshot을 먼저 로드한다. DB 상태가 없거나 DB 접근에 실패한 경우에만 파일 snapshot을 로드하고, 둘 다 없을 때 seed data로 새 시뮬레이션을 시작한다. 저장 상태는 `GET /api/simulator/persistence`에서 확인한다.

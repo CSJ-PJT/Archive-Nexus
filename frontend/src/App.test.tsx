@@ -9,7 +9,17 @@ vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     : url.includes('/api/archiveos/interactions')
       ? []
       : url.includes('/api/simulator/persistence')
-        ? { enabled: true, stateFile: 'data/archive-nexus-state.json', snapshotExists: true, lastPersistedAt: new Date().toISOString() }
+        ? {
+            enabled: true,
+            storageMode: 'postgresql',
+            dbAvailable: true,
+            fileSnapshotAvailable: true,
+            stateFile: 'data/archive-nexus-state.json',
+            snapshotExists: true,
+            lastSavedAt: new Date().toISOString(),
+            lastPersistedAt: new Date().toISOString(),
+            restoredFrom: 'postgresql'
+          }
         : {
           simulator: { running: true, tick: 1, factoryCount: 3, alertCount: 0, rpaTaskCount: 0, parallelWorkerCount: 3, updatedAt: new Date().toISOString() },
           factories: [],

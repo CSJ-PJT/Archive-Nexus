@@ -20,12 +20,12 @@ class NexusStatePersistenceTest {
         Path stateFile = tempDir.resolve("archive-nexus-state.json");
         ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
-        NexusStateService firstService = new NexusStateService(new MockArchiveOsClient(), objectMapper, 20260626, true, stateFile);
+        NexusStateService firstService = new NexusStateService(new MockArchiveOsClient(), null, objectMapper, 20260626, true, stateFile);
         firstService.generateTick();
         long persistedTick = firstService.status().tick();
         firstService.shutdown();
 
-        NexusStateService restoredService = new NexusStateService(new MockArchiveOsClient(), objectMapper, 20260626, true, stateFile);
+        NexusStateService restoredService = new NexusStateService(new MockArchiveOsClient(), null, objectMapper, 20260626, true, stateFile);
 
         assertThat(restoredService.status().tick()).isEqualTo(persistedTick);
         assertThat(restoredService.factories()).hasSize(3);

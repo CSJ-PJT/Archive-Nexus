@@ -43,11 +43,13 @@ Factory Event
 
 ## Runtime State Recovery
 
-Archive Nexus는 MVP 단계에서 데이터베이스 영속화 전까지 파일 기반 runtime snapshot을 사용한다.
+Archive Nexus는 PostgreSQL/JPA 기반 runtime snapshot을 운영 저장소로 사용한다.
 
-- 기본 저장 파일: `data/archive-nexus-state.json`
+- 운영 저장소: PostgreSQL `simulator_state` 테이블
+- Local backup/fallback 파일: `data/archive-nexus-state.json`
 - 저장 시점: simulator start/stop, tick 생성, RPA 승인/거절, 애플리케이션 종료
-- 복구 시점: 백엔드 시작 시 snapshot이 존재하면 tick, factory 상태, 센서/생산/품질/재고/물류/정비/RPA/Batch/ArchiveOS interaction 상태를 복구한다.
+- 복구 순서: PostgreSQL snapshot을 먼저 복구하고, DB 상태가 없거나 DB 접근에 실패한 경우에만 파일 snapshot을 사용한다.
+- 복구 대상: tick, factory 상태, 센서/생산/품질/재고/물류/정비/RPA/Batch/ArchiveOS interaction 상태
 - 관측 API: `GET /api/simulator/persistence`
 
-이 구조는 Codex 개입 없이 프로세스 재시작 후에도 가상 공장 생태계가 이전 상태에서 계속 진행되도록 하기 위한 임시 운영 계층이다. 이후 PostgreSQL/JPA 영속화로 대체할 수 있다.
+`GET /api/simulator/persistence`는 `storageMode`, `dbAvailable`, `fileSnapshotAvailable`, `lastSavedAt`, `restoredFrom`을 반환한다. 이 구조는 Codex 개입 없이 프로세스 재시작 후에도 가상 공장 생태계가 이전 상태에서 계속 진행되도록 하기 위한 운영 계층이다.

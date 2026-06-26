@@ -13,7 +13,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(properties = "archive-nexus.simulator.persistence-enabled=false")
+@SpringBootTest(properties = {
+        "spring.datasource.url=jdbc:h2:mem:archive_nexus_smoke;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+        "spring.datasource.driver-class-name=org.h2.Driver",
+        "spring.datasource.username=sa",
+        "spring.datasource.password=",
+        "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "spring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=true",
+        "archive-nexus.simulator.persistence-enabled=false"
+})
 @AutoConfigureMockMvc
 class NexusApiSmokeTest {
     @Autowired

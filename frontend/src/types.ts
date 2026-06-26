@@ -56,9 +56,14 @@ export type ArchiveOsInteraction = {
 
 export type SimulatorPersistenceStatus = {
   enabled: boolean;
+  storageMode: string;
+  dbAvailable: boolean;
+  fileSnapshotAvailable: boolean;
   stateFile: string;
   snapshotExists: boolean;
+  lastSavedAt: string | null;
   lastPersistedAt: string | null;
+  restoredFrom: string;
 };
 
 export type Overview = {

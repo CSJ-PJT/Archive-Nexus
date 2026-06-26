@@ -19,3 +19,24 @@ create table if not exists rpa_execution_logs (id varchar(40) primary key, rpa_t
 create table if not exists simulator_runs (id varchar(40) primary key, running boolean not null, tick bigint not null, started_at timestamptz not null, stopped_at timestamptz);
 create table if not exists batch_snapshots (id bigserial primary key, tick bigint not null, factory_count integer not null, production_order_count integer not null, total_produced_quantity integer not null, average_defect_rate numeric(8,4) not null, alert_count integer not null, pending_approval_count integer not null, created_at timestamptz not null);
 create table if not exists archiveos_interactions (id varchar(40) primary key, type varchar(80) not null, factory_id varchar(40), payload text not null, occurred_at timestamptz not null);
+
+create table if not exists simulator_state (
+    id varchar(80) primary key,
+    running boolean not null,
+    tick bigint not null,
+    last_parallel_worker_count integer not null,
+    factories_json text not null,
+    sensor_metrics_json text not null,
+    production_orders_json text not null,
+    lots_json text not null,
+    quality_inspections_json text not null,
+    inventory_items_json text not null,
+    inventory_transactions_json text not null,
+    logistics_shipments_json text not null,
+    maintenance_events_json text not null,
+    alerts_json text not null,
+    rpa_tasks_json text not null,
+    batch_snapshots_json text not null,
+    archiveos_interactions_json text not null,
+    saved_at timestamptz not null
+);

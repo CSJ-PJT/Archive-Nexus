@@ -288,6 +288,7 @@ archive-nexus
 │
 ├── docs
 │   ├── architecture.md
+│   ├── schema.md
 │   ├── simulation-model.md
 │   ├── factory-scenarios.md
 │   └── archiveos-integration.md
@@ -372,7 +373,9 @@ GET /api/simulator/persistence
 ```
 
 `GET /api/simulator/status`는 마지막 tick에서 병렬 실행된 factory worker 수를 `parallelWorkerCount`로 반환합니다.
-`GET /api/simulator/persistence`는 파일 기반 상태 스냅샷 활성화 여부, 저장 경로, 마지막 저장 시각을 반환합니다.
+`GET /api/simulator/persistence`는 `storageMode`, `dbAvailable`, `fileSnapshotAvailable`, `lastSavedAt`, `restoredFrom`을 반환합니다.
+
+시뮬레이터 운영 상태는 PostgreSQL/JPA 저장소를 우선 사용합니다. `data/archive-nexus-state.json` 파일 snapshot은 DB 저장 실패나 DB 상태 부재 시 fallback/local backup 용도로만 사용합니다.
 
 ---
 

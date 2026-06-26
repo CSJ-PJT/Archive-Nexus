@@ -17,9 +17,14 @@ const fallback: Overview = {
 
 const fallbackPersistence: SimulatorPersistenceStatus = {
   enabled: false,
+  storageMode: 'disabled',
+  dbAvailable: false,
+  fileSnapshotAvailable: false,
   stateFile: '',
   snapshotExists: false,
-  lastPersistedAt: null
+  lastSavedAt: null,
+  lastPersistedAt: null,
+  restoredFrom: 'seed'
 };
 
 export function App() {
@@ -202,10 +207,12 @@ function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions, persis
           <span>데이터 생성 주기: 5초</span>
           <span>병렬 factory worker: {overview.simulator.parallelWorkerCount}</span>
           <span>ArchiveOS adapter: mock</span>
-          <span>persistence: {persistence.enabled ? 'enabled' : 'disabled'}</span>
-          <span>snapshot: {persistence.snapshotExists ? 'available' : 'not created'}</span>
+          <span>storage mode: {persistence.storageMode}</span>
+          <span>db: {persistence.dbAvailable ? 'available' : 'unavailable'}</span>
+          <span>file snapshot: {persistence.fileSnapshotAvailable ? 'available' : 'not created'}</span>
+          <span>restored from: {persistence.restoredFrom}</span>
           <span>state file: {persistence.stateFile || '-'}</span>
-          <span>last persisted: {persistence.lastPersistedAt ?? '-'}</span>
+          <span>last saved: {persistence.lastSavedAt ?? persistence.lastPersistedAt ?? '-'}</span>
           <span>seed: 20260626</span>
         </div>
       </div>
