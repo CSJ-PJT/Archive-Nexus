@@ -3,14 +3,17 @@ package com.archivenexus.backend;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 import com.archivenexus.backend.service.NexusStateService;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = {
@@ -24,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "archive-nexus.simulator.persistence-enabled=false"
 })
 @AutoConfigureMockMvc
+@AutoConfigureObservability
 class NexusApiSmokeTest {
     @Autowired
     MockMvc mvc;
@@ -70,5 +74,19 @@ class NexusApiSmokeTest {
 
         mvc.perform(get("/api/archiveos/interactions"))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void exposesPrometheusOperationalMetrics() throws Exception {
+        mvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("archive_nexus_simulator_running")))
+                .andExpect(content().string(containsString("archive_nexus_simulator_tick")))
+                .andExpect(content().string(containsString("archive_nexus_factory_count")))
+                .andExpect(content().string(containsString("archive_nexus_anomaly_count")))
+                .andExpect(content().string(containsString("archive_nexus_rpa_task_count")))
+                .andExpect(content().string(containsString("archive_nexus_batch_snapshot_count")))
+                .andExpect(content().string(containsString("archive_nexus_persistence_save_total")))
+                .andExpect(content().string(containsString("archive_nexus_restore_source_total")));
     }
 }

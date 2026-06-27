@@ -70,6 +70,9 @@ public class NexusStateService {
     private final AtomicInteger lastParallelWorkerCount = new AtomicInteger(0);
     private final AtomicReference<Instant> lastPersistedAt = new AtomicReference<>();
     private final AtomicReference<String> restoredFrom = new AtomicReference<>("seed");
+    private final AtomicLong postgresqlRestoreCount = new AtomicLong();
+    private final AtomicLong fileRestoreCount = new AtomicLong();
+    private final AtomicLong seedRestoreCount = new AtomicLong();
 
     private final List<Factory> factories = new ArrayList<>();
     private final List<SensorMetric> sensorMetrics = new CopyOnWriteArrayList<>();
@@ -101,6 +104,7 @@ public class NexusStateService {
         this.stateFile = stateFile;
 
         if (!restoreState()) {
+            seedRestoreCount.incrementAndGet();
             seedFactories();
             seedInventory();
             generateTick();
@@ -235,6 +239,19 @@ public class NexusStateService {
         return archiveOsClient.interactions();
     }
 
+    public int anomalyCount() {
+        return alerts.size();
+    }
+
+    public long restoreSourceCount(String source) {
+        return switch (source) {
+            case "postgresql" -> postgresqlRestoreCount.get();
+            case "file" -> fileRestoreCount.get();
+            case "seed" -> seedRestoreCount.get();
+            default -> 0;
+        };
+    }
+
     public Optional<RpaTask> rpaTask(String id) {
         return rpaTasks.stream().filter(task -> task.id().equals(id)).findFirst();
     }
@@ -266,6 +283,7 @@ public class NexusStateService {
             Optional<NexusSnapshot> databaseSnapshot = simulatorStateStore.restore();
             if (databaseSnapshot.isPresent() && applySnapshot(databaseSnapshot.get())) {
                 restoredFrom.set("postgresql");
+                postgresqlRestoreCount.incrementAndGet();
                 return true;
             }
         }
@@ -278,6 +296,7 @@ public class NexusStateService {
             boolean restored = applySnapshot(snapshot);
             if (restored) {
                 restoredFrom.set("file");
+                fileRestoreCount.incrementAndGet();
             }
             return restored;
         } catch (IOException cause) {

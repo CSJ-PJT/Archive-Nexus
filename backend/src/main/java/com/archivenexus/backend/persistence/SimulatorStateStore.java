@@ -27,6 +27,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
@@ -39,6 +40,7 @@ public class SimulatorStateStore {
     private final ObjectMapper objectMapper;
     private final AtomicBoolean dbAvailable = new AtomicBoolean(true);
     private final AtomicReference<Instant> lastSavedAt = new AtomicReference<>();
+    private final AtomicLong successfulSaveCount = new AtomicLong();
 
     public SimulatorStateStore(SimulatorStateRepository repository, ObjectMapper objectMapper) {
         this.repository = repository;
@@ -60,6 +62,7 @@ public class SimulatorStateStore {
             repository.save(toEntity(snapshot));
             dbAvailable.set(true);
             lastSavedAt.set(snapshot.persistedAt());
+            successfulSaveCount.incrementAndGet();
             return true;
         } catch (DataAccessException | JsonProcessingException cause) {
             dbAvailable.set(false);
@@ -74,6 +77,10 @@ public class SimulatorStateStore {
 
     public Instant lastSavedAt() {
         return lastSavedAt.get();
+    }
+
+    public long successfulSaveCount() {
+        return successfulSaveCount.get();
     }
 
     private SimulatorStateEntity toEntity(NexusSnapshot snapshot) throws JsonProcessingException {
