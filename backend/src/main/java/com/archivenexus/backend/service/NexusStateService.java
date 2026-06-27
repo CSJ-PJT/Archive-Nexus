@@ -299,6 +299,9 @@ public class NexusStateService {
 
     public void recordAgentInteraction(String type, String factoryId, String payload) {
         archiveOsClient.recordInteraction(type, factoryId, payload);
+    }
+
+    public void flushAgentState() {
         persistState();
     }
 

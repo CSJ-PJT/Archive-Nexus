@@ -97,6 +97,7 @@ public class ManufacturingOrchestrator {
         );
         history.save(response);
         nexus.recordAgentInteraction("AGENT_RESPONSE_COMPOSED", factoryId, queryId + ":" + status);
+        nexus.flushAgentState();
         return response;
     }
 

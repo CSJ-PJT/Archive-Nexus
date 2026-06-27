@@ -3,7 +3,6 @@ package com.archivenexus.backend.ai.persistence;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -15,23 +14,23 @@ public class AiQueryEntity {
     @Column(name = "query_id", length = 80)
     private String queryId;
 
-    @Lob @Column(name = "original_question", nullable = false)
+    @Column(name = "original_question", nullable = false, columnDefinition = "text")
     private String originalQuestion;
     @Column(name = "requested_by", nullable = false, length = 120)
     private String requestedBy;
     @Column(name = "selected_factory_id", length = 80)
     private String selectedFactoryId;
-    @Lob @Column(name = "routed_intents_json", nullable = false)
+    @Column(name = "routed_intents_json", nullable = false, columnDefinition = "text")
     private String routedIntentsJson;
-    @Lob @Column(name = "invoked_agents_json", nullable = false)
+    @Column(name = "invoked_agents_json", nullable = false, columnDefinition = "text")
     private String invokedAgentsJson;
-    @Lob @Column(name = "agent_results_json", nullable = false)
+    @Column(name = "agent_results_json", nullable = false, columnDefinition = "text")
     private String agentResultsJson;
-    @Lob @Column(name = "final_answer", nullable = false)
+    @Column(name = "final_answer", nullable = false, columnDefinition = "text")
     private String finalAnswer;
-    @Lob @Column(name = "evidence_json", nullable = false)
+    @Column(name = "evidence_json", nullable = false, columnDefinition = "text")
     private String evidenceJson;
-    @Lob @Column(name = "recommended_actions_json", nullable = false)
+    @Column(name = "recommended_actions_json", nullable = false, columnDefinition = "text")
     private String recommendedActionsJson;
     @Column(nullable = false)
     private double confidence;
@@ -39,7 +38,7 @@ public class AiQueryEntity {
     private String executionStatus;
     @Column(name = "execution_time_ms", nullable = false)
     private long executionTimeMs;
-    @Lob @Column(name = "error_message")
+    @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
     @Column(name = "rpa_task_id", length = 80)
     private String rpaTaskId;
