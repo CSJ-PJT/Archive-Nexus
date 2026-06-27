@@ -77,7 +77,23 @@ public final class DomainModels {
     public record FactoryAlert(String id, String factoryId, AlertSeverity severity, String category, String message, Instant occurredAt) {
     }
 
-    public record RpaTask(String id, String factoryId, RpaTaskStatus status, String trigger, String recommendation, boolean approvalRequired, Instant createdAt) {
+    public record RpaTask(
+            String id,
+            String factoryId,
+            RpaTaskStatus status,
+            String trigger,
+            String recommendation,
+            boolean approvalRequired,
+            Instant createdAt,
+            String actionType,
+            String priority,
+            String source,
+            String sourceQueryId,
+            String reason,
+            String recommendedAction,
+            List<String> evidence,
+            boolean requiresApproval
+    ) {
     }
 
     public record RpaDecision(String id, String rpaTaskId, String decision, String actor, Instant decidedAt) {

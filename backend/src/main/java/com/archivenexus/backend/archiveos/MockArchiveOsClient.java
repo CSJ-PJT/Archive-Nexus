@@ -43,7 +43,15 @@ public class MockArchiveOsClient implements ArchiveOsClient {
                 alert.message(),
                 recommendation,
                 approvalRequired,
-                Instant.now()
+                Instant.now(),
+                alert.category(),
+                alert.severity() == AlertSeverity.CRITICAL ? "HIGH" : "MEDIUM",
+                "ANOMALY",
+                null,
+                alert.message(),
+                recommendation,
+                List.of(alert.category() + ":" + alert.message()),
+                approvalRequired
         );
     }
 
@@ -61,6 +69,39 @@ public class MockArchiveOsClient implements ArchiveOsClient {
     @Override
     public void publishAlert(FactoryAlert alert) {
         record("ALERT_PUBLISH", alert.factoryId(), alert.message());
+    }
+
+    @Override
+    public void recordInteraction(String type, String factoryId, String payload) {
+        record(type, factoryId, payload);
+    }
+
+    public RpaTask createAgentRpaTask(
+            String factoryId,
+            String queryId,
+            String reason,
+            String recommendedAction,
+            List<String> evidence,
+            boolean requiresApproval
+    ) {
+        record("RPA_TASK_CREATE", factoryId, "MULTI_AGENT:" + queryId + ":" + recommendedAction);
+        return new RpaTask(
+                "RPA-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
+                factoryId,
+                requiresApproval ? RpaTaskStatus.APPROVAL_REQUIRED : RpaTaskStatus.RECOMMENDATION_READY,
+                reason,
+                recommendedAction,
+                requiresApproval,
+                Instant.now(),
+                "MANUFACTURING_RECOMMENDATION",
+                requiresApproval ? "HIGH" : "MEDIUM",
+                "MULTI_AGENT",
+                queryId,
+                reason,
+                recommendedAction,
+                List.copyOf(evidence),
+                requiresApproval
+        );
     }
 
     public boolean requiresApproval(FactoryAlert alert) {

@@ -17,4 +17,6 @@ public interface ArchiveOsClient {
     void requestApproval(RpaTask task);
 
     void publishAlert(FactoryAlert alert);
+
+    void recordInteraction(String type, String factoryId, String payload);
 }

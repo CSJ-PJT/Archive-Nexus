@@ -268,10 +268,38 @@ public class NexusStateService {
         Optional<RpaTask> current = rpaTask(id);
         current.ifPresent(task -> {
             rpaTasks.remove(task);
-            rpaTasks.add(new RpaTask(task.id(), task.factoryId(), status, task.trigger(), task.recommendation(), task.approvalRequired(), task.createdAt()));
+            rpaTasks.add(new RpaTask(
+                    task.id(), task.factoryId(), status, task.trigger(), task.recommendation(),
+                    task.approvalRequired(), task.createdAt(), task.actionType(), task.priority(), task.source(),
+                    task.sourceQueryId(), task.reason(), task.recommendedAction(), task.evidence(), task.requiresApproval()
+            ));
             persistState();
         });
         return rpaTask(id);
+    }
+
+    public RpaTask createAgentRpaTask(
+            String factoryId,
+            String queryId,
+            String reason,
+            String recommendedAction,
+            List<String> evidence,
+            boolean requiresApproval
+    ) {
+        RpaTask task = archiveOsClient.createAgentRpaTask(
+                factoryId, queryId, reason, recommendedAction, evidence, requiresApproval
+        );
+        rpaTasks.add(task);
+        if (requiresApproval) {
+            archiveOsClient.requestApproval(task);
+        }
+        persistState();
+        return task;
+    }
+
+    public void recordAgentInteraction(String type, String factoryId, String payload) {
+        archiveOsClient.recordInteraction(type, factoryId, payload);
+        persistState();
     }
 
     private boolean restoreState() {

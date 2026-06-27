@@ -383,6 +383,8 @@ GET /api/simulator/persistence
 
 React 운영 대시보드는 5초마다 제조 도메인 API를 병렬 조회하여 하나의 관제 화면으로 구성합니다.
 
+전용 운영 요약은 `GET /api/dashboard/summary`에서 simulator, persistence, 제조 domain count, anomaly, 최근 anomaly와 Manufacturing AI 요약을 함께 반환합니다.
+
 - Overview: 시뮬레이터 상태, 생산 달성률, 평균 불량률, 재고 위험, 출하 지연, 최근 이상 이벤트
 - Factories: 공장별 생산·품질·물류·정비·경보 상태
 - Production / Inventory / Quality / Maintenance / Logistics: 실제 시뮬레이터 데이터 테이블
@@ -414,6 +416,37 @@ docker compose up --build -d
 Grafana 기본 계정은 `admin / archive_nexus_local`이며 `.env`의 `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`로 변경할 수 있습니다. `Archive Nexus / Archive Nexus Operations` 대시보드는 simulator, factory, anomaly, RPA, batch, PostgreSQL 저장 및 복구 원본 지표를 5초 주기로 표시합니다.
 
 상세 지표와 운영 확인 절차는 [`docs/monitoring.md`](docs/monitoring.md)를 참고합니다.
+
+---
+
+## Manufacturing Multi-Agent
+
+Archive Nexus는 Spring AI `ChatModel` 계약을 사용하는 Manufacturing Orchestrator를 제공합니다. 모델 bean이 없거나 호출에 실패하면 동일 API가 keyword/rule router로 동작하므로 API key 없이도 로컬·테스트 환경에서 사용할 수 있습니다.
+
+지원 Agent:
+
+- `ProductionAgent`: 목표 대비 생산 달성률, 최근 생산 저하, 공장 간 차이와 병목 근거
+- `QualityAgent`: 평균/최근 불량률, 품질 경보와 Lot 이상 근거
+- `MaintenanceAgent`: 온도·진동·전류 임계치, 정비 이벤트와 설비 위험 근거
+
+```http
+POST /api/ai/query
+GET /api/ai/queries
+GET /api/ai/queries/{queryId}
+GET /api/ai/summary
+```
+
+```json
+{
+  "question": "3공장의 생산량 감소 원인과 설비 이상 여부를 분석해줘",
+  "factoryId": "FACTORY-C",
+  "requestedBy": "operator"
+}
+```
+
+복합 질문은 최대 3개의 제한된 worker에서 관련 Agent를 병렬 실행합니다. 한 Agent가 실패해도 성공 결과로 부분 응답을 구성하며, 조치가 필요한 분석은 제조 데이터를 직접 변경하지 않고 기존 RPA/승인 흐름으로 전달합니다. 실행 이력은 PostgreSQL `ai_query_history`에 저장되고 모든 단계는 ArchiveOS Interaction Log에 기록됩니다.
+
+프론트엔드의 `Manufacturing AI` 메뉴에서 질문, 공장, Intent routing, Agent별 결과, 근거, 권장 조치, RPA 생성 여부와 Query History를 확인할 수 있습니다. 상세 설계는 [`docs/multi-agent-architecture.md`](docs/multi-agent-architecture.md)를 참고합니다.
 
 ---
 
@@ -485,6 +518,7 @@ Grafana 기본 계정은 `admin / archive_nexus_local`이며 `.env`의 `GRAFANA_
 - [x] Docker Compose 실행 환경 구성
 - [x] 제조 운영 대시보드 구성
 - [x] Prometheus/Grafana 운영 모니터링 기반 구성
+- [x] Spring AI 제조 Orchestrator와 전문 Agent 기반 구성
 - [ ] 감사 로그 고도화
 - [ ] 사용자 인증 및 역할 기반 권한 구성
 - [ ] 화면 캡처 및 운영 문서 작성

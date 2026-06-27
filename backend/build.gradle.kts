@@ -19,10 +19,12 @@ repositories {
 }
 
 dependencies {
+	implementation(platform("org.springframework.ai:spring-ai-bom:1.1.8"))
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
 	implementation("org.flywaydb:flyway-core")
 	implementation("io.micrometer:micrometer-registry-prometheus")
+	implementation("org.springframework.ai:spring-ai-model")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-web")
 	runtimeOnly("org.postgresql:postgresql")

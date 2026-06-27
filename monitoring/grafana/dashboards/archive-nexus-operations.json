@@ -64,6 +64,34 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 }, "id": 8,
       "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "none" } },
       "targets": [{ "expr": "archive_nexus_restore_source_total", "legendFormat": "{{source}}", "refId": "A" }], "title": "Restore Source Count", "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "archive-nexus-prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 13 }, "id": 9,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
+      "targets": [{ "expr": "archive_nexus_ai_query_total", "refId": "A" }], "title": "AI Query Total", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "archive-nexus-prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 13 }, "id": 10,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
+      "targets": [{ "expr": "archive_nexus_agent_failure_total", "refId": "A" }], "title": "Agent Failure Total", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "archive-nexus-prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 13 }, "id": 11,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
+      "targets": [{ "expr": "archive_nexus_agent_execution_duration_seconds_sum / clamp_min(archive_nexus_agent_execution_duration_seconds_count, 1)", "refId": "A" }], "title": "Average Agent Duration", "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "archive-nexus-prometheus" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] } }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 13 }, "id": 12,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
+      "targets": [{ "expr": "archive_nexus_agent_rpa_task_total", "refId": "A" }], "title": "Agent RPA Task Total", "type": "stat"
     }
   ],
   "refresh": "5s",

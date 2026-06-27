@@ -59,6 +59,11 @@ class NexusApiSmokeTest {
         mvc.perform(get("/api/simulator/persistence"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false));
+
+        mvc.perform(get("/api/dashboard/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.factoryCount").value(3))
+                .andExpect(jsonPath("$.ai.totalQueries").isNumber());
     }
 
     @Test
@@ -87,6 +92,12 @@ class NexusApiSmokeTest {
                 .andExpect(content().string(containsString("archive_nexus_rpa_task_count")))
                 .andExpect(content().string(containsString("archive_nexus_batch_snapshot_count")))
                 .andExpect(content().string(containsString("archive_nexus_persistence_save_total")))
-                .andExpect(content().string(containsString("archive_nexus_restore_source_total")));
+                .andExpect(content().string(containsString("archive_nexus_restore_source_total")))
+                .andExpect(content().string(containsString("archive_nexus_ai_query_total")))
+                .andExpect(content().string(containsString("archive_nexus_agent_execution_total")))
+                .andExpect(content().string(containsString("archive_nexus_agent_failure_total")))
+                .andExpect(content().string(containsString("archive_nexus_agent_execution_duration_seconds")))
+                .andExpect(content().string(containsString("archive_nexus_routed_intent_total")))
+                .andExpect(content().string(containsString("archive_nexus_agent_rpa_task_total")));
     }
 }

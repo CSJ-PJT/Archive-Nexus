@@ -33,6 +33,69 @@ export type RpaTask = {
   recommendation: string;
   approvalRequired: boolean;
   createdAt: string;
+  actionType?: string;
+  priority?: string;
+  source?: string;
+  sourceQueryId?: string | null;
+  reason?: string;
+  recommendedAction?: string;
+  evidence?: string[];
+  requiresApproval?: boolean;
+};
+
+export type AgentEvidence = {
+  type: string;
+  description: string;
+  value: string;
+  source: string;
+};
+
+export type AgentResult = {
+  agentName: string;
+  intent: string;
+  summary: string;
+  evidence: AgentEvidence[];
+  recommendedActions: string[];
+  confidence: number;
+  executionTimeMs: number;
+  status: string;
+  errorMessage: string | null;
+  actionRequired: boolean;
+};
+
+export type AiQueryRequest = {
+  question: string;
+  factoryId?: string;
+  requestedBy?: string;
+};
+
+export type AiQueryResponse = {
+  queryId: string;
+  question: string;
+  requestedBy: string;
+  selectedFactoryId: string | null;
+  routedIntents: string[];
+  invokedAgents: string[];
+  agentResults: AgentResult[];
+  answer: string;
+  evidence: AgentEvidence[];
+  recommendedActions: string[];
+  confidence: number;
+  partialFailure: boolean;
+  approvalRequired: boolean;
+  rpaTaskId: string | null;
+  executionStatus: string;
+  executionTimeMs: number;
+  errorMessage: string | null;
+  createdAt: string;
+};
+
+export type AiDashboardSummary = {
+  totalQueries: number;
+  runningAgents: number;
+  agentFailures: number;
+  agentRpaTasks: number;
+  recentRecommendation: string;
 };
 
 export type ProductionOrder = {

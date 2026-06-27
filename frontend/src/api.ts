@@ -1,5 +1,5 @@
 import type {
-  ArchiveOsInteraction, BatchSnapshot, Factory, FactoryAlert, InventoryItem,
+  AiDashboardSummary, AiQueryRequest, AiQueryResponse, ArchiveOsInteraction, BatchSnapshot, Factory, FactoryAlert, InventoryItem,
   InventoryTransaction, LogisticsShipment, MaintenanceEvent, Overview,
   ProductionOrder, QualityInspection, RpaTask, SimulatorPersistenceStatus,
   SimulatorStatus
@@ -33,5 +33,11 @@ export const api = {
   approveRpa: (id: string) => request<RpaTask>(`/api/rpa/tasks/${id}/approve`, { method: 'POST' }),
   rejectRpa: (id: string) => request<RpaTask>(`/api/rpa/tasks/${id}/reject`, { method: 'POST' }),
   batchSnapshots: () => request<BatchSnapshot[]>('/api/batch/snapshots'),
-  archiveOsInteractions: () => request<ArchiveOsInteraction[]>('/api/archiveos/interactions')
+  archiveOsInteractions: () => request<ArchiveOsInteraction[]>('/api/archiveos/interactions'),
+  aiQuery: (body: AiQueryRequest) => request<AiQueryResponse>('/api/ai/query', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+  }),
+  aiQueries: () => request<AiQueryResponse[]>('/api/ai/queries'),
+  aiQueryDetail: (id: string) => request<AiQueryResponse>(`/api/ai/queries/${id}`),
+  aiSummary: () => request<AiDashboardSummary>('/api/ai/summary')
 };

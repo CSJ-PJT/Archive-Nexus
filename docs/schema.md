@@ -32,3 +32,28 @@ For simulator runtime recovery, the operational persistence table is `simulator_
 | `saved_at` | Last DB save timestamp |
 
 The file snapshot at `data/archive-nexus-state.json` remains as fallback/local backup. Restore order is PostgreSQL first, file snapshot second, seed data last.
+
+## ai_query_history
+
+`V2__add_ai_query_history.sql`은 Manufacturing Orchestrator 실행 이력을 저장한다.
+
+| Column | Purpose |
+|---|---|
+| `query_id` | AI Query correlation key |
+| `original_question` | 운영자 자연어 질문 |
+| `requested_by` | 요청 사용자 |
+| `selected_factory_id` | 선택 공장, 전체 범위이면 null |
+| `routed_intents_json` | 복수 routing Intent |
+| `invoked_agents_json` | 호출 Agent 이름 |
+| `agent_results_json` | Agent별 상태, 근거, 권장 조치, 실행 시간 |
+| `final_answer` | 통합 운영 판단 |
+| `evidence_json` | 통합 근거 |
+| `recommended_actions_json` | 통합 권장 조치 |
+| `confidence` | 통합 신뢰도 |
+| `execution_status` | 완료, 부분 성공, 데이터 부족, 실패 상태 |
+| `execution_time_ms` | 전체 실행 시간 |
+| `error_message` | 실패 Agent 또는 실행 오류 |
+| `rpa_task_id` | 연결된 Multi-Agent RPA task |
+| `created_at` | 실행 시각 |
+
+현재 프로젝트의 runtime JSON 저장 규칙과 동일하게 구조화 목록은 text JSON으로 저장하며, 기존 DB 데이터를 삭제하거나 `simulator_state` 구조를 변경하지 않는다.

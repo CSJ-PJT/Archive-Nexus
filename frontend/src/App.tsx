@@ -1,17 +1,18 @@
 import {
-  Activity, AlertTriangle, Boxes, CheckCircle2, CircleStop, Clock3, Database,
+  Activity, AlertTriangle, Bot, Boxes, CheckCircle2, CircleStop, Clock3, Database,
   Factory, Gauge, Play, RefreshCw, ShieldCheck, Truck, Wrench
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
+import { ManufacturingAiPanel } from './ManufacturingAiPanel';
 import type {
-  ArchiveOsInteraction, BatchSnapshot, InventoryItem, InventoryTransaction,
+  AiDashboardSummary, ArchiveOsInteraction, BatchSnapshot, InventoryItem, InventoryTransaction,
   LogisticsShipment, MaintenanceEvent, Overview, ProductionOrder,
   QualityInspection, RpaTask, SimulatorPersistenceStatus
 } from './types';
 
-const tabs = ['Overview', 'Factories', 'Production', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
+const tabs = ['Overview', 'Manufacturing AI', 'Factories', 'Production', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
 type Tab = (typeof tabs)[number];
 
 type OperationsData = {
@@ -36,6 +37,9 @@ const fallbackPersistence: SimulatorPersistenceStatus = {
   enabled: false, storageMode: 'disabled', dbAvailable: false, fileSnapshotAvailable: false,
   stateFile: '', snapshotExists: false, lastSavedAt: null, lastPersistedAt: null, restoredFrom: 'seed'
 };
+const fallbackAiSummary: AiDashboardSummary = {
+  totalQueries: 0, runningAgents: 0, agentFailures: 0, agentRpaTasks: 0, recentRecommendation: '최근 권장 조치 없음'
+};
 
 export function App() {
   const [tab, setTab] = useState<Tab>('Overview');
@@ -44,6 +48,7 @@ export function App() {
   const [batchSnapshots, setBatchSnapshots] = useState<BatchSnapshot[]>([]);
   const [archiveOsInteractions, setArchiveOsInteractions] = useState<ArchiveOsInteraction[]>([]);
   const [persistence, setPersistence] = useState<SimulatorPersistenceStatus>(fallbackPersistence);
+  const [aiSummary, setAiSummary] = useState<AiDashboardSummary>(fallbackAiSummary);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState('');
@@ -53,16 +58,17 @@ export function App() {
     try {
       const [nextOverview, productionOrders, qualityInspections, inventoryItems, inventoryTransactions,
         logisticsShipments, maintenanceEvents, rpaTasks, nextBatchSnapshots,
-        nextArchiveOsInteractions, nextPersistence] = await Promise.all([
+        nextArchiveOsInteractions, nextPersistence, nextAiSummary] = await Promise.all([
         api.overview(), api.productionOrders(), api.qualityInspections(), api.inventoryItems(),
         api.inventoryTransactions(), api.logisticsShipments(), api.maintenanceEvents(), api.rpaTasks(),
-        api.batchSnapshots(), api.archiveOsInteractions(), api.simulatorPersistence()
+        api.batchSnapshots(), api.archiveOsInteractions(), api.simulatorPersistence(), api.aiSummary()
       ]);
       setOverview(nextOverview);
       setOperations({ productionOrders, qualityInspections, inventoryItems, inventoryTransactions, logisticsShipments, maintenanceEvents, rpaTasks });
       setBatchSnapshots(nextBatchSnapshots);
       setArchiveOsInteractions(nextArchiveOsInteractions);
       setPersistence(nextPersistence);
+      setAiSummary(nextAiSummary);
       setLastUpdatedAt(new Date());
       setError('');
     } catch (cause) {
@@ -118,7 +124,8 @@ export function App() {
           <Metric icon={<Boxes />} label="Stock risks" value={stockRiskCount} tone={stockRiskCount ? 'warning' : 'normal'} />
           <Metric icon={<Truck />} label="Delayed" value={delayedCount} tone={delayedCount ? 'warning' : 'normal'} />
         </section>
-        {tab === 'Overview' && <OverviewPanel overview={overview} operations={operations} />}
+        {tab === 'Overview' && <OverviewPanel overview={overview} operations={operations} aiSummary={aiSummary} />}
+        {tab === 'Manufacturing AI' && <ManufacturingAiPanel factories={overview.factories} onChanged={load} />}
         {tab === 'Factories' && <FactoriesPanel overview={overview} operations={operations} />}
         {tab === 'Production' && <ProductionPanel orders={operations.productionOrders} />}
         {tab === 'Inventory' && <InventoryPanel items={operations.inventoryItems} transactions={operations.inventoryTransactions} />}
@@ -136,7 +143,7 @@ function Metric({ icon, label, value, tone = 'normal' }: { icon: ReactNode; labe
   return <div className={`metric ${tone}`}><span>{icon}</span><small>{label}</small><strong>{value}</strong></div>;
 }
 
-function OverviewPanel({ overview, operations }: { overview: Overview; operations: OperationsData }) {
+function OverviewPanel({ overview, operations, aiSummary }: { overview: Overview; operations: OperationsData; aiSummary: AiDashboardSummary }) {
   const totalTarget = operations.productionOrders.reduce((sum, order) => sum + order.targetQuantity, 0);
   const totalProduced = operations.productionOrders.reduce((sum, order) => sum + order.producedQuantity, 0);
   const avgDefect = average(operations.qualityInspections.map((item) => item.defectRate));
@@ -145,6 +152,7 @@ function OverviewPanel({ overview, operations }: { overview: Overview; operation
     <section className="panel wide"><PanelTitle icon={<AlertTriangle />} title="최근 이상 이벤트" count={overview.recentAlerts.length} /><EventList overview={overview} /></section>
     <section className="panel"><PanelTitle icon={<Activity />} title="운영 상태" /><p className={overview.simulator.running ? 'state on' : 'state'}>{overview.simulator.running ? 'RUNNING' : 'STOPPED'}</p><dl className="summary-list"><Summary label="생산 달성률" value={percent(totalProduced, totalTarget)} /><Summary label="평균 불량률" value={formatPercent(avgDefect)} /><Summary label="미처리 정비" value={`${openMaintenance}건`} /><Summary label="승인 대기" value={`${overview.pendingRpaTasks.length}건`} /></dl></section>
     <section className="panel full"><PanelTitle icon={<Factory />} title="공장 운영 현황" /><FactoryTable overview={overview} operations={operations} /></section>
+    <section className="panel full ai-overview"><PanelTitle icon={<Bot />} title="Manufacturing AI" /><div className="ai-overview-stats"><Summary label="최근 AI Query" value={`${aiSummary.totalQueries}건`} /><Summary label="실행 중 Agent" value={`${aiSummary.runningAgents}개`} /><Summary label="Agent 실패" value={`${aiSummary.agentFailures}건`} /><Summary label="Agent 기반 RPA" value={`${aiSummary.agentRpaTasks}건`} /></div><p><strong>최근 권장 조치</strong> · {aiSummary.recentRecommendation}</p></section>
   </div>;
 }
 

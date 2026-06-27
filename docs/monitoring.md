@@ -56,6 +56,12 @@ GRAFANA_ADMIN_PASSWORD=change-me
 | `archive_nexus_batch_snapshot_count` | gauge | batch snapshot 누적 수 |
 | `archive_nexus_persistence_save_total` | counter | PostgreSQL runtime snapshot 저장 성공 횟수 |
 | `archive_nexus_restore_source_total{source=...}` | counter | `postgresql`, `file`, `seed`별 프로세스 복구 횟수 |
+| `archive_nexus_ai_query_total` | counter | 수신한 Manufacturing AI Query 수 |
+| `archive_nexus_agent_execution_total` | counter | 완료 또는 실패한 Agent 실행 수 |
+| `archive_nexus_agent_failure_total` | counter | 실패한 Agent 실행 수 |
+| `archive_nexus_agent_execution_duration_seconds` | timer | Agent 실행 시간 count/sum/max |
+| `archive_nexus_routed_intent_total{intent=...}` | counter | Intent별 routing 수 |
+| `archive_nexus_agent_rpa_task_total` | counter | Multi-Agent 분석으로 생성한 RPA task 수 |
 
 모든 Micrometer 지표에는 `application="archive-nexus-backend"` 공통 tag가 추가된다. 현재 anomaly 지표의 권위 있는 원본은 이상 규칙이 생성한 `FactoryAlert` 목록이다.
 
@@ -77,6 +83,7 @@ Provisioning 파일:
 - batch snapshot count
 - PostgreSQL persistence save count
 - restore source count
+- AI Query/Agent 실패/평균 실행 시간/Agent RPA 수
 
 ## 운영 점검
 
