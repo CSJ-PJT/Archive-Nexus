@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/brand/archive-nexus-lockup.svg" width="760" alt="Archive Nexus" />
+</p>
+
 # Archive-Nexus
 
 > **AI 기반 가상 공장과 지능형 RPA를 위한 제조 AX 플랫폼**
