@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Archive Nexus">
+  <rect width="256" height="256" rx="40" fill="#071014"/>
+  <g fill="#F5F7FA">
+    <path d="M45 202 111 42h29L74 202Z"/>
+    <path d="M120 42h29l66 160h-29Z"/>
+    <path d="M110 159h70l11 27h-69Z"/>
+  </g>
+  <circle cx="112" cy="143" r="14" fill="#16D6E3"/>
+</svg>
