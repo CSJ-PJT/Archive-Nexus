@@ -102,12 +102,12 @@ export function App() {
 
   return <main className="shell">
     <aside className="sidebar">
-      <div className="brand"><Factory size={28} /><div><strong>Archive Nexus</strong><span>Manufacturing AX</span></div></div>
+      <div className="brand"><img src="/archive-nexus-mark.svg" alt="" aria-hidden="true" /><div><strong>Archive Nexus</strong><span>Manufacturing AX</span></div></div>
       <nav aria-label="주요 메뉴">{tabs.map((item) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>{item}</button>)}</nav>
     </aside>
     <section className="workspace">
       <header className="topbar">
-        <div><h1>{tab}</h1><p>ArchiveOS 제조 운영 관제 · {lastUpdatedAt ? `최근 동기화 ${formatTime(lastUpdatedAt)}` : '연결 중'}</p></div>
+        <div className="topbar-title"><img src="/archive-nexus-mark.svg" alt="" aria-hidden="true" /><div><h1>{tab}</h1><p>ArchiveOS 제조 운영 관제 · {lastUpdatedAt ? `최근 동기화 ${formatTime(lastUpdatedAt)}` : '연결 중'}</p></div></div>
         <div className="actions">
           <button className="icon-button secondary" onClick={() => void load()} title="데이터 새로고침" aria-label="데이터 새로고침"><RefreshCw size={17} /></button>
           <button onClick={() => void runAction(api.startSimulator)} disabled={actionPending || overview.simulator.running}><Play size={17} />Start</button>
