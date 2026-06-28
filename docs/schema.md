@@ -54,6 +54,13 @@ The file snapshot at `data/archive-nexus-state.json` remains as fallback/local b
 | `execution_time_ms` | 전체 실행 시간 |
 | `error_message` | 실패 Agent 또는 실행 오류 |
 | `rpa_task_id` | 연결된 Multi-Agent RPA task |
+
+## Nexus 운영 작업
+
+`nexus_tasks`는 `MANUFACTURING_QUERY`, `SIMULATOR_TICK` 작업과 `PENDING`, `RUNNING`,
+`SUCCESS`, `FAILED`, `CANCELLED` 상태, 실행 횟수, 결과와 오류, 감사 시각을 저장한다.
+`nexus_task_logs`는 작업별 INFO/WARN/ERROR 로그를 시간순으로 저장한다. 두 테이블은 simulator
+snapshot과 분리된 JPA/Flyway 영속 모델이다.
 | `created_at` | 실행 시각 |
 
 현재 프로젝트의 runtime JSON 저장 규칙과 동일하게 구조화 목록은 text JSON으로 저장하며, 기존 DB 데이터를 삭제하거나 `simulator_state` 구조를 변경하지 않는다.

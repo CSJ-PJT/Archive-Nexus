@@ -12,17 +12,20 @@
 
 ## 진행 중
 
-- 운영 작업 생성·실행과 Agent 상태·로그 영속화
-- 실패 작업 재시도, 실행 전 취소, 크리티컬 Discord 알림
-- 작은 화면에서 작업 생성·상태·로그·버튼을 사용할 수 있는 모바일 흐름
 - 실제 Discord webhook과 외부/ngrok 환경 검증
 
 ## 미구현
 
-- `PENDING`, `RUNNING`, `SUCCESS`, `FAILED`, `CANCELLED` 작업 수명주기 API
-- 작업 생성부터 Agent 실행, 결과 저장, 알림, UI 갱신까지 이어지는 end-to-end 흐름
-- 환경변수 기반 Discord webhook adapter
 - 외부/ngrok 접속 검증
+
+## 이번 브랜치에서 완료
+
+- `nexus_tasks`, `nexus_task_logs` JPA/Flyway 영속화
+- 작업 생성·조회·실행·취소·재시도·로그 API
+- 제한된 TaskExecutor와 Manufacturing Orchestrator/Simulator Service 연결
+- 실패 및 승인 필요 이벤트 전용 Discord adapter와 환경변수 설정
+- Tasks UI, 실제 API 갱신, 상태별 실행 버튼과 로그 표시
+- 820px 이하 단일 열 작업 화면
 
 ## 차단 요소
 
