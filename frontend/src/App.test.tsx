@@ -6,7 +6,7 @@ vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
   const url = String(input);
   const body = ['/api/production/orders', '/api/quality/inspections', '/api/inventory/items',
     '/api/inventory/transactions', '/api/logistics/shipments', '/api/maintenance/events',
-    '/api/rpa/tasks', '/api/batch/snapshots', '/api/archiveos/interactions', '/api/ai/queries'].some((path) => url.includes(path))
+    '/api/rpa/tasks', '/api/tasks', '/api/batch/snapshots', '/api/archiveos/interactions', '/api/ai/queries'].some((path) => url.includes(path))
     ? []
     : url.includes('/api/ai/summary')
       ? { totalQueries: 0, runningAgents: 0, agentFailures: 0, agentRpaTasks: 0, recentRecommendation: '최근 권장 조치 없음' }
@@ -58,4 +58,5 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '질문 실행' })).toBeInTheDocument();
     expect(screen.getByText('최근 Query History')).toBeInTheDocument();
   });
+  it('renders the task execution and log workspace', async () => { render(<App />); fireEvent.click(await screen.findByRole('button',{name:'Tasks'})); expect(await screen.findByText('운영 작업 생성')).toBeInTheDocument(); expect(screen.getByText('작업 상세와 실행 로그')).toBeInTheDocument(); expect(screen.getByRole('button',{name:'작업 만들기'})).toBeInTheDocument(); });
 });

@@ -6,13 +6,14 @@ import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 import { ManufacturingAiPanel } from './ManufacturingAiPanel';
+import { TaskOperationsPanel } from './TaskOperationsPanel';
 import type {
   AiDashboardSummary, ArchiveOsInteraction, BatchSnapshot, InventoryItem, InventoryTransaction,
-  LogisticsShipment, MaintenanceEvent, Overview, ProductionOrder,
+  LogisticsShipment, MaintenanceEvent, NexusTask, Overview, ProductionOrder,
   QualityInspection, RpaTask, SimulatorPersistenceStatus
 } from './types';
 
-const tabs = ['Overview', 'Manufacturing AI', 'Factories', 'Production', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
+const tabs = ['Overview', 'Tasks', 'Manufacturing AI', 'Factories', 'Production', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
 type Tab = (typeof tabs)[number];
 
 type OperationsData = {
@@ -23,6 +24,7 @@ type OperationsData = {
   logisticsShipments: LogisticsShipment[];
   maintenanceEvents: MaintenanceEvent[];
   rpaTasks: RpaTask[];
+  tasks: NexusTask[];
 };
 
 const fallback: Overview = {
@@ -31,7 +33,7 @@ const fallback: Overview = {
 };
 const emptyOperations: OperationsData = {
   productionOrders: [], qualityInspections: [], inventoryItems: [], inventoryTransactions: [],
-  logisticsShipments: [], maintenanceEvents: [], rpaTasks: []
+  logisticsShipments: [], maintenanceEvents: [], rpaTasks: [], tasks: []
 };
 const fallbackPersistence: SimulatorPersistenceStatus = {
   enabled: false, storageMode: 'disabled', dbAvailable: false, fileSnapshotAvailable: false,
@@ -57,14 +59,14 @@ export function App() {
   const load = useCallback(async () => {
     try {
       const [nextOverview, productionOrders, qualityInspections, inventoryItems, inventoryTransactions,
-        logisticsShipments, maintenanceEvents, rpaTasks, nextBatchSnapshots,
+        logisticsShipments, maintenanceEvents, rpaTasks, tasks, nextBatchSnapshots,
         nextArchiveOsInteractions, nextPersistence, nextAiSummary] = await Promise.all([
         api.overview(), api.productionOrders(), api.qualityInspections(), api.inventoryItems(),
-        api.inventoryTransactions(), api.logisticsShipments(), api.maintenanceEvents(), api.rpaTasks(),
+        api.inventoryTransactions(), api.logisticsShipments(), api.maintenanceEvents(), api.rpaTasks(), api.tasks(),
         api.batchSnapshots(), api.archiveOsInteractions(), api.simulatorPersistence(), api.aiSummary()
       ]);
       setOverview(nextOverview);
-      setOperations({ productionOrders, qualityInspections, inventoryItems, inventoryTransactions, logisticsShipments, maintenanceEvents, rpaTasks });
+      setOperations({ productionOrders, qualityInspections, inventoryItems, inventoryTransactions, logisticsShipments, maintenanceEvents, rpaTasks, tasks });
       setBatchSnapshots(nextBatchSnapshots);
       setArchiveOsInteractions(nextArchiveOsInteractions);
       setPersistence(nextPersistence);
@@ -125,6 +127,7 @@ export function App() {
           <Metric icon={<Truck />} label="Delayed" value={delayedCount} tone={delayedCount ? 'warning' : 'normal'} />
         </section>
         {tab === 'Overview' && <OverviewPanel overview={overview} operations={operations} aiSummary={aiSummary} />}
+        {tab === 'Tasks' && <TaskOperationsPanel factories={overview.factories} tasks={operations.tasks} onChanged={load} />}
         {tab === 'Manufacturing AI' && <ManufacturingAiPanel factories={overview.factories} onChanged={load} />}
         {tab === 'Factories' && <FactoriesPanel overview={overview} operations={operations} />}
         {tab === 'Production' && <ProductionPanel orders={operations.productionOrders} />}

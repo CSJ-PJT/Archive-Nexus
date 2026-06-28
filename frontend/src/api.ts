@@ -1,7 +1,7 @@
 import type {
   AiDashboardSummary, AiQueryRequest, AiQueryResponse, ArchiveOsInteraction, BatchSnapshot, Factory, FactoryAlert, InventoryItem,
   InventoryTransaction, LogisticsShipment, MaintenanceEvent, Overview,
-  ProductionOrder, QualityInspection, RpaTask, SimulatorPersistenceStatus,
+  CreateNexusTask, NexusTask, NexusTaskLog, ProductionOrder, QualityInspection, RpaTask, SimulatorPersistenceStatus,
   SimulatorStatus
 } from './types';
 
@@ -20,6 +20,12 @@ export const api = {
   factories: () => request<Factory[]>('/api/factories'),
   alerts: (factoryId: string) => request<FactoryAlert[]>(`/api/factories/${factoryId}/alerts`),
   rpaTasks: () => request<RpaTask[]>('/api/rpa/tasks'),
+  tasks: () => request<NexusTask[]>('/api/tasks'),
+  createTask: (body: CreateNexusTask) => request<NexusTask>('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  taskLogs: (id: string) => request<NexusTaskLog[]>(`/api/tasks/${id}/logs`),
+  runTask: (id: string) => request<NexusTask>(`/api/tasks/${id}/run`, { method: 'POST' }),
+  cancelTask: (id: string) => request<NexusTask>(`/api/tasks/${id}/cancel`, { method: 'POST' }),
+  retryTask: (id: string) => request<NexusTask>(`/api/tasks/${id}/retry`, { method: 'POST' }),
   simulatorStatus: () => request<SimulatorStatus>('/api/simulator/status'),
   startSimulator: () => request<SimulatorStatus>('/api/simulator/start', { method: 'POST' }),
   stopSimulator: () => request<SimulatorStatus>('/api/simulator/stop', { method: 'POST' }),

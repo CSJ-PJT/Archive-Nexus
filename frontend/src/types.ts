@@ -42,6 +42,11 @@ export type RpaTask = {
   evidence?: string[];
   requiresApproval?: boolean;
 };
+export type NexusTaskStatus='PENDING'|'RUNNING'|'SUCCESS'|'FAILED'|'CANCELLED';
+export type NexusTaskType='MANUFACTURING_QUERY'|'SIMULATOR_TICK';
+export type NexusTask={id:string;title:string;type:NexusTaskType;factoryId:string|null;question:string|null;requestedBy:string;status:NexusTaskStatus;attemptCount:number;maxAttempts:number;resultSummary:string|null;errorMessage:string|null;createdAt:string;startedAt:string|null;completedAt:string|null;updatedAt:string;};
+export type NexusTaskLog={id:number;taskId:string;level:string;message:string;createdAt:string;};
+export type CreateNexusTask={title:string;type:NexusTaskType;factoryId?:string;question?:string;requestedBy?:string;maxAttempts?:number;};
 
 export type AgentEvidence = {
   type: string;
