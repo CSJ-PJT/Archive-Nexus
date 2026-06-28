@@ -1,11 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">Archive Nexus mark</title>
-  <desc id="desc">Angular Archive Nexus A mark with a cyan convergence node and detached lower-right bar.</desc>
-  <rect width="256" height="256" rx="40" fill="#071014"/>
-  <g fill="#F5F7FA">
-    <path d="M45 202 111 42h29L74 202Z"/>
-    <path d="M120 42h29l66 160h-29Z"/>
-    <path d="M110 159h70l11 27h-69Z"/>
-  </g>
-  <circle cx="112" cy="143" r="14" fill="#16D6E3"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="m" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="0.55" stop-color="#fafafa"/><stop offset="1" stop-color="#ececec"/></linearGradient>
+    <linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#12f2f5"/><stop offset="1" stop-color="#00dde8"/></linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="#000"/>
+  <path d="M475.3 144.5 91.5 855 213.1 853.3 512 297.2 677.8 605.9 538.9 608.4 538.9 632.9 691.6 632.9 754.5 750.4 503.8 752.9 551.2 854.1 932.5 855 550.4 145.4Z" fill="url(#m)"/>
+  <circle cx="498" cy="620.6" r="42" fill="url(#c)"/>
 </svg>
