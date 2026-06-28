@@ -26,6 +26,8 @@ spring:
       mode: never
 
 archive-nexus:
+  notifications:
+    discord-webhook-url: ${ARCHIVE_NEXUS_DISCORD_WEBHOOK_URL:}
   simulator:
     seed: 20260626
     tick-delay-ms: 5000

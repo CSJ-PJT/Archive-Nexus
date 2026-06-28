@@ -26,6 +26,7 @@ services:
       ARCHIVE_NEXUS_DB_URL: ${ARCHIVE_NEXUS_DB_URL:-jdbc:postgresql://postgres:5432/archive_nexus}
       ARCHIVE_NEXUS_DB_USERNAME: ${POSTGRES_USER:-archive_nexus}
       ARCHIVE_NEXUS_DB_PASSWORD: ${POSTGRES_PASSWORD:-archive_nexus_local}
+      ARCHIVE_NEXUS_DISCORD_WEBHOOK_URL: ${ARCHIVE_NEXUS_DISCORD_WEBHOOK_URL:-}
     ports:
       - "8080:8080"
     healthcheck:

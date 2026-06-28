@@ -19,6 +19,8 @@ create table if not exists rpa_execution_logs (id varchar(40) primary key, rpa_t
 create table if not exists simulator_runs (id varchar(40) primary key, running boolean not null, tick bigint not null, started_at timestamptz not null, stopped_at timestamptz);
 create table if not exists batch_snapshots (id bigserial primary key, tick bigint not null, factory_count integer not null, production_order_count integer not null, total_produced_quantity integer not null, average_defect_rate numeric(8,4) not null, alert_count integer not null, pending_approval_count integer not null, created_at timestamptz not null);
 create table if not exists archiveos_interactions (id varchar(40) primary key, type varchar(80) not null, factory_id varchar(40), payload text not null, occurred_at timestamptz not null);
+create table if not exists nexus_tasks (id varchar(48) primary key,title varchar(180) not null,task_type varchar(40) not null,factory_id varchar(40),question text,requested_by varchar(120) not null,status varchar(20) not null,attempt_count integer not null default 0,max_attempts integer not null default 3,result_summary text,error_message text,created_at timestamptz not null,started_at timestamptz,completed_at timestamptz,updated_at timestamptz not null);
+create table if not exists nexus_task_logs (id bigserial primary key,task_id varchar(48) not null references nexus_tasks(id) on delete cascade,level varchar(16) not null,message text not null,created_at timestamptz not null);
 
 create table if not exists simulator_state (
     id varchar(80) primary key,
