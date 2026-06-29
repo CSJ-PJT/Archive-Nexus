@@ -24,7 +24,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.jpa.database-platform=org.hibernate.dialect.H2Dialect",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.properties.hibernate.boot.allow_jdbc_metadata_access=true",
-        "archive-nexus.simulator.persistence-enabled=false"
+        "archive-nexus.simulator.persistence-enabled=false",
+        "archive-nexus.archiveos.base-url=http://127.0.0.1:1",
+        "archive-nexus.archiveos.timeout-ms=100"
 })
 @AutoConfigureMockMvc
 @AutoConfigureObservability
@@ -55,6 +57,14 @@ class NexusApiSmokeTest {
 
         mvc.perform(get("/api/archiveos/interactions"))
                 .andExpect(status().isOk());
+
+        mvc.perform(get("/api/archiveos/interactions").param("limit", "1"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/archiveos/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").isNotEmpty());
 
         mvc.perform(get("/api/simulator/persistence"))
                 .andExpect(status().isOk())

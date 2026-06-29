@@ -26,6 +26,9 @@ spring:
       mode: never
 
 archive-nexus:
+  archiveos:
+    base-url: ${ARCHIVEOS_BASE_URL:http://host.docker.internal:4000}
+    timeout-ms: ${ARCHIVEOS_TIMEOUT_MS:2000}
   notifications:
     discord-webhook-url: ${ARCHIVE_NEXUS_DISCORD_WEBHOOK_URL:}
   simulator:

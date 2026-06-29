@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -36,8 +37,10 @@ public class NexusController {
     }
 
     @GetMapping("/overview")
-    Overview overview() {
-        return nexus.overview();
+    Overview overview(@RequestParam(required = false) Integer pendingLimit) {
+        Overview overview = nexus.overview();
+        return new Overview(overview.simulator(), overview.factories(), overview.recentAlerts(),
+                tail(overview.pendingRpaTasks(), pendingLimit), overview.kpis());
     }
 
     @GetMapping("/factories")
@@ -66,13 +69,13 @@ public class NexusController {
     }
 
     @GetMapping("/production/orders")
-    List<ProductionOrder> productionOrders() {
-        return nexus.productionOrders();
+    List<ProductionOrder> productionOrders(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.productionOrders(), limit);
     }
 
     @GetMapping("/quality/inspections")
-    List<QualityInspection> inspections() {
-        return nexus.inspections();
+    List<QualityInspection> inspections(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.inspections(), limit);
     }
 
     @GetMapping("/inventory/items")
@@ -81,23 +84,23 @@ public class NexusController {
     }
 
     @GetMapping("/inventory/transactions")
-    List<InventoryTransaction> inventoryTransactions() {
-        return nexus.inventoryTransactions();
+    List<InventoryTransaction> inventoryTransactions(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.inventoryTransactions(), limit);
     }
 
     @GetMapping("/logistics/shipments")
-    List<LogisticsShipment> shipments() {
-        return nexus.shipments();
+    List<LogisticsShipment> shipments(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.shipments(), limit);
     }
 
     @GetMapping("/maintenance/events")
-    List<MaintenanceEvent> maintenanceEvents() {
-        return nexus.maintenanceEvents();
+    List<MaintenanceEvent> maintenanceEvents(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.maintenanceEvents(), limit);
     }
 
     @GetMapping("/rpa/tasks")
-    List<RpaTask> rpaTasks() {
-        return nexus.rpaTasks();
+    List<RpaTask> rpaTasks(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.rpaTasks(), limit);
     }
 
     @GetMapping("/rpa/tasks/{id}")
@@ -106,13 +109,13 @@ public class NexusController {
     }
 
     @GetMapping("/batch/snapshots")
-    List<BatchSnapshot> batchSnapshots() {
-        return nexus.batchSnapshots();
+    List<BatchSnapshot> batchSnapshots(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.batchSnapshots(), limit);
     }
 
     @GetMapping("/archiveos/interactions")
-    List<ArchiveOsInteraction> archiveOsInteractions() {
-        return nexus.archiveOsInteractions();
+    List<ArchiveOsInteraction> archiveOsInteractions(@RequestParam(required = false) Integer limit) {
+        return tail(nexus.archiveOsInteractions(), limit);
     }
 
     @PostMapping("/rpa/tasks/{id}/approve")
@@ -143,5 +146,17 @@ public class NexusController {
     @GetMapping("/simulator/persistence")
     SimulatorPersistenceStatus simulatorPersistenceStatus() {
         return nexus.persistenceStatus();
+    }
+
+    private static <T> List<T> tail(List<T> values, Integer limit) {
+        if (limit == null) {
+            return values;
+        }
+        int safeLimit = Math.max(0, Math.min(limit, 1000));
+        if (safeLimit == 0) {
+            return List.of();
+        }
+        int fromIndex = Math.max(0, values.size() - safeLimit);
+        return List.copyOf(values.subList(fromIndex, values.size()));
     }
 }

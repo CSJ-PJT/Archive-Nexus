@@ -173,6 +173,13 @@ export type ArchiveOsInteraction = {
   occurredAt: string;
 };
 
+export type ArchiveOsStatus = {
+  status: 'AVAILABLE' | 'DEGRADED' | 'UNAVAILABLE';
+  httpStatus: number | null;
+  message: string;
+  checkedAt: string;
+};
+
 export type SimulatorPersistenceStatus = {
   enabled: boolean;
   storageMode: string;
