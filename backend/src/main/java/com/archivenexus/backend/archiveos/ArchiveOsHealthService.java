@@ -70,9 +70,9 @@ public class ArchiveOsHealthService {
         if (!services.isObject()) {
             return true;
         }
-        Iterator<Map.Entry<String, JsonNode>> fields = services.fields();
-        while (fields.hasNext()) {
-            if (!fields.next().getValue().asBoolean(false)) {
+        Iterator<Map.Entry<String, JsonNode>> properties = services.properties().iterator();
+        while (properties.hasNext()) {
+            if (!properties.next().getValue().asBoolean(false)) {
                 return true;
             }
         }

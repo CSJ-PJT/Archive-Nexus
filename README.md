@@ -86,6 +86,8 @@ docker compose ps
 ArchiveOS 상태는 `GET /api/archiveos/status`에서 확인한다. 기본 연동 주소는
 `http://host.docker.internal:4000`이며, ArchiveOS 장애는 Nexus 제조 데이터 API와 화면 로딩을
 중단시키지 않고 `DEGRADED` 또는 `UNAVAILABLE` 상태로 표시된다.
+Windows Docker Desktop에서는 `host.docker.internal`이 기본 동작한다. Linux Docker Engine에서는
+Compose의 `host-gateway` mapping을 사용하며, ArchiveOS 위치가 다르면 `ARCHIVEOS_BASE_URL`을 override한다.
 작업은 `PENDING → RUNNING → SUCCESS | FAILED | CANCELLED`로 관리하며 Agent 분석은 기존
 Manufacturing Orchestrator를 호출한다. 실패 또는 승인 필요 알림의 Discord webhook은
 `ARCHIVE_NEXUS_DISCORD_WEBHOOK_URL` 환경변수로만 주입한다.

@@ -62,3 +62,18 @@ Manufacturing Orchestrator는 Nexus 내부에서 Agent를 실행하고 다음 li
 - `AGENT_RESPONSE_COMPOSED`
 
 분석에서 조치가 필요하면 기존 RPA task 목록에 `source=MULTI_AGENT` task를 추가한다. task에는 `sourceQueryId`, priority, reason, recommended action, evidence, approval 필요 여부가 포함된다. ArchiveOS 원격 Agent 실행은 아직 사용하지 않으며, interaction event가 추후 중앙 관제 연결점이다.
+
+## Docker host resolution
+
+Windows Docker Desktop에서는 `host.docker.internal`이 기본 제공되므로 Nexus backend 컨테이너가
+host의 ArchiveOS Node API `http://host.docker.internal:4000`으로 접근할 수 있다.
+
+Linux Docker Engine에서는 동일 이름이 기본 제공되지 않을 수 있어 Compose에 다음 mapping을 둔다.
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+ArchiveOS가 다른 host 또는 별도 Docker network에서 실행된다면 코드 변경 대신 `ARCHIVEOS_BASE_URL`을
+해당 주소로 override한다.
