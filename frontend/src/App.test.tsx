@@ -1,6 +1,8 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
+
+let archiveStatus = { status: 'DEGRADED', httpStatus: 200, message: 'ArchiveOS optional service unavailable', checkedAt: new Date().toISOString() };
 
 vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
   const url = String(input);
@@ -10,6 +12,8 @@ vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     ? []
     : url.includes('/api/ai/summary')
       ? { totalQueries: 0, runningAgents: 0, agentFailures: 0, agentRpaTasks: 0, recentRecommendation: '최근 권장 조치 없음' }
+    : url.includes('/api/archiveos/status')
+      ? archiveStatus
     : url.includes('/api/simulator/persistence')
         ? {
             enabled: true,
@@ -37,11 +41,15 @@ vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
 }));
 
 describe('App', () => {
+  beforeEach(() => {
+    archiveStatus = { status: 'DEGRADED', httpStatus: 200, message: 'ArchiveOS optional service unavailable', checkedAt: new Date().toISOString() };
+  });
   it('renders Archive Nexus control surface', async () => {
     render(<App />);
     expect(await screen.findByText('Archive Nexus')).toBeInTheDocument();
     expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
     expect(await screen.findByText('공장 운영 현황')).toBeInTheDocument();
+    expect(await screen.findByText('ArchiveOS DEGRADED')).toBeInTheDocument();
   });
 
   it('opens a domain operations view', async () => {
@@ -59,4 +67,10 @@ describe('App', () => {
     expect(screen.getByText('최근 Query History')).toBeInTheDocument();
   });
   it('renders the task execution and log workspace', async () => { render(<App />); fireEvent.click(await screen.findByRole('button',{name:'Tasks'})); expect(await screen.findByText('운영 작업 생성')).toBeInTheDocument(); expect(screen.getByText('작업 상세와 실행 로그')).toBeInTheDocument(); expect(screen.getByRole('button',{name:'작업 만들기'})).toBeInTheDocument(); });
+  it('keeps operations visible when ArchiveOS is unavailable', async () => {
+    archiveStatus = { status: 'UNAVAILABLE', httpStatus: 503, message: 'ArchiveOS is unreachable', checkedAt: new Date().toISOString() };
+    render(<App />);
+    expect(await screen.findByText('ArchiveOS UNAVAILABLE')).toBeInTheDocument();
+    expect(screen.queryByText('운영 데이터를 불러오는 중입니다.')).not.toBeInTheDocument();
+  });
 });

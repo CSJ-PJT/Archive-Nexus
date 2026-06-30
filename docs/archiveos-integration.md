@@ -2,6 +2,17 @@
 
 Archive Nexus는 ArchiveOS를 직접 포함하지 않는다. `ArchiveOsClient` interface를 통해 플랫폼 기능을 호출한다.
 
+## Runtime 상태 확인
+
+Nexus backend는 `ARCHIVEOS_BASE_URL`의 `/api/health`를 짧은 timeout으로 조회하고
+`GET /api/archiveos/status`에서 `AVAILABLE`, `DEGRADED`, `UNAVAILABLE` 상태를 반환한다.
+로컬 Compose 기본 주소는 실제 ArchiveOS Node API 포트에 맞춘
+`http://host.docker.internal:4000`이다. `ARCHIVEOS_TIMEOUT_MS`의 기본값은 2000ms다.
+
+이 상태 확인은 제조 시뮬레이션과 도메인 API 실행 경로에서 분리된다. ArchiveOS가 중단되거나
+일부 선택 서비스가 degraded여도 Nexus 제조 데이터와 화면은 계속 제공되며, 화면 상단과
+Settings에서 연동 상태와 확인 메시지를 표시한다.
+
 ## Adapter 계약
 
 - `sendEvent()`: 제조 이벤트 또는 이상 알림 전송
@@ -51,3 +62,18 @@ Manufacturing Orchestrator는 Nexus 내부에서 Agent를 실행하고 다음 li
 - `AGENT_RESPONSE_COMPOSED`
 
 분석에서 조치가 필요하면 기존 RPA task 목록에 `source=MULTI_AGENT` task를 추가한다. task에는 `sourceQueryId`, priority, reason, recommended action, evidence, approval 필요 여부가 포함된다. ArchiveOS 원격 Agent 실행은 아직 사용하지 않으며, interaction event가 추후 중앙 관제 연결점이다.
+
+## Docker host resolution
+
+Windows Docker Desktop에서는 `host.docker.internal`이 기본 제공되므로 Nexus backend 컨테이너가
+host의 ArchiveOS Node API `http://host.docker.internal:4000`으로 접근할 수 있다.
+
+Linux Docker Engine에서는 동일 이름이 기본 제공되지 않을 수 있어 Compose에 다음 mapping을 둔다.
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+ArchiveOS가 다른 host 또는 별도 Docker network에서 실행된다면 코드 변경 대신 `ARCHIVEOS_BASE_URL`을
+해당 주소로 override한다.
