@@ -43,6 +43,14 @@ create table if not exists simulator_state (
     saved_at timestamptz not null
 );
 
+create table if not exists simulator_control_state (
+    id varchar(80) primary key,
+    running boolean not null,
+    tick bigint not null,
+    last_parallel_worker_count integer not null,
+    updated_at timestamptz not null
+);
+
 create table if not exists ai_query_history (
     query_id varchar(80) primary key,
     original_question text not null,
