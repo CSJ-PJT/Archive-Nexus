@@ -17,6 +17,8 @@ import com.archivenexus.backend.domain.DomainModels.SensorMetric;
 import com.archivenexus.backend.domain.DomainModels.SimulatorPersistenceStatus;
 import com.archivenexus.backend.domain.DomainModels.SimulatorStatus;
 import com.archivenexus.backend.service.NexusStateService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,6 +32,8 @@ import java.util.List;
 @RestController
 @RequestMapping("/api")
 public class NexusController {
+    private static final Logger log = LoggerFactory.getLogger(NexusController.class);
+
     private final NexusStateService nexus;
 
     public NexusController(NexusStateService nexus) {
@@ -130,12 +134,12 @@ public class NexusController {
 
     @PostMapping("/simulator/start")
     SimulatorStatus start() {
-        return nexus.start();
+        return timedControl("start", nexus::start);
     }
 
     @PostMapping("/simulator/stop")
     SimulatorStatus stop() {
-        return nexus.stop();
+        return timedControl("stop", nexus::stop);
     }
 
     @GetMapping("/simulator/status")
@@ -146,6 +150,14 @@ public class NexusController {
     @GetMapping("/simulator/persistence")
     SimulatorPersistenceStatus simulatorPersistenceStatus() {
         return nexus.persistenceStatus();
+    }
+
+    private SimulatorStatus timedControl(String operation, java.util.function.Supplier<SimulatorStatus> action) {
+        long startedAt = System.nanoTime();
+        SimulatorStatus result = action.get();
+        long totalMs = (System.nanoTime() - startedAt) / 1_000_000;
+        log.info("Simulator HTTP control operation={} running={} totalMs={}", operation, result.running(), totalMs);
+        return result;
     }
 
     private static <T> List<T> tail(List<T> values, Integer limit) {

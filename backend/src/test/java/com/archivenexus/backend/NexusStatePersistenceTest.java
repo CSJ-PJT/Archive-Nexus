@@ -33,4 +33,22 @@ class NexusStatePersistenceTest {
 
         restoredService.shutdown();
     }
+
+    @Test
+    void restoresLatestControlStateWithoutRewritingFullSnapshot() {
+        Path stateFile = tempDir.resolve("archive-nexus-control-state.json");
+        ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
+
+        NexusStateService firstService = new NexusStateService(new MockArchiveOsClient(), null, objectMapper, 20260626, true, stateFile);
+        firstService.start();
+
+        NexusStateService restoredService = new NexusStateService(new MockArchiveOsClient(), null, objectMapper, 20260626, true, stateFile);
+
+        assertThat(restoredService.status().running()).isTrue();
+
+        restoredService.stop();
+        firstService.stop();
+        restoredService.shutdown();
+        firstService.shutdown();
+    }
 }

@@ -24,6 +24,7 @@ import com.archivenexus.backend.domain.DomainModels.SensorMetric;
 import com.archivenexus.backend.domain.DomainModels.SimulatorPersistenceStatus;
 import com.archivenexus.backend.domain.DomainModels.SimulatorStatus;
 import com.archivenexus.backend.persistence.SimulatorStateStore;
+import com.archivenexus.backend.persistence.SimulatorControlStateEntity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +65,9 @@ public class NexusStateService {
     private final Random random;
     private final ExecutorService factoryExecutor;
     private final Path stateFile;
+    private final Path controlStateFile;
     private final boolean persistenceEnabled;
+    private final Object controlStateLock = new Object();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicLong tick = new AtomicLong(0);
     private final AtomicInteger lastParallelWorkerCount = new AtomicInteger(0);
@@ -102,6 +105,7 @@ public class NexusStateService {
         this.factoryExecutor = Executors.newFixedThreadPool(Math.max(3, Runtime.getRuntime().availableProcessors()));
         this.persistenceEnabled = persistenceEnabled;
         this.stateFile = stateFile;
+        this.controlStateFile = stateFile.resolveSibling(stateFile.getFileName() + ".control.json");
 
         if (!restoreState()) {
             seedRestoreCount.incrementAndGet();
@@ -112,14 +116,39 @@ public class NexusStateService {
     }
 
     public SimulatorStatus start() {
-        running.set(true);
-        persistState();
-        return status();
+        return transitionRunning(true);
     }
 
     public SimulatorStatus stop() {
-        running.set(false);
-        persistState();
+        return transitionRunning(false);
+    }
+
+    private SimulatorStatus transitionRunning(boolean requestedRunning) {
+        long startedAt = System.nanoTime();
+        long databaseMs;
+        long fileMs;
+        boolean changed;
+        boolean databaseSaved;
+        synchronized (controlStateLock) {
+            changed = running.getAndSet(requestedRunning) != requestedRunning;
+            Instant savedAt = Instant.now();
+            long databaseStartedAt = System.nanoTime();
+            databaseSaved = !persistenceEnabled || simulatorStateStore == null
+                    || simulatorStateStore.saveControlState(running.get(), tick.get(), lastParallelWorkerCount.get(), savedAt);
+            databaseMs = elapsedMillis(databaseStartedAt);
+            long fileStartedAt = System.nanoTime();
+            if (persistenceEnabled) {
+                persistControlFile(new SimulatorControlState(
+                        running.get(), tick.get(), lastParallelWorkerCount.get(), savedAt
+                ));
+            }
+            fileMs = elapsedMillis(fileStartedAt);
+        }
+        long totalMs = elapsedMillis(startedAt);
+        log.info(
+                "Simulator control transition running={} changed={} databaseSaved={} databaseMs={} controlFileMs={} totalMs={}",
+                requestedRunning, changed, databaseSaved, databaseMs, fileMs, totalMs
+        );
         return status();
     }
 
@@ -313,6 +342,8 @@ public class NexusStateService {
         if (simulatorStateStore != null) {
             Optional<NexusSnapshot> databaseSnapshot = simulatorStateStore.restore();
             if (databaseSnapshot.isPresent() && applySnapshot(databaseSnapshot.get())) {
+                Instant controlSavedAt = restoreDatabaseControlState(databaseSnapshot.get().persistedAt());
+                restoreControlFile(controlSavedAt);
                 restoredFrom.set("postgresql");
                 postgresqlRestoreCount.incrementAndGet();
                 return true;
@@ -326,6 +357,8 @@ public class NexusStateService {
             NexusSnapshot snapshot = objectMapper.readValue(stateFile.toFile(), NexusSnapshot.class);
             boolean restored = applySnapshot(snapshot);
             if (restored) {
+                Instant controlSavedAt = restoreDatabaseControlState(snapshot.persistedAt());
+                restoreControlFile(controlSavedAt);
                 restoredFrom.set("file");
                 fileRestoreCount.incrementAndGet();
             }
@@ -340,12 +373,37 @@ public class NexusStateService {
         if (!persistenceEnabled) {
             return;
         }
+        long startedAt = System.nanoTime();
         Instant persistedAt = Instant.now();
+        long snapshotStartedAt = System.nanoTime();
         NexusSnapshot snapshot = snapshot(persistedAt);
+        long snapshotMs = elapsedMillis(snapshotStartedAt);
+        long databaseStartedAt = System.nanoTime();
         if (simulatorStateStore != null) {
             simulatorStateStore.save(snapshot);
         }
+        long databaseMs = elapsedMillis(databaseStartedAt);
+        long fileStartedAt = System.nanoTime();
         persistFileSnapshot(snapshot);
+        long fileMs = elapsedMillis(fileStartedAt);
+        synchronized (controlStateLock) {
+            Instant controlSavedAt = Instant.now();
+            if (simulatorStateStore != null) {
+                simulatorStateStore.saveControlState(
+                        running.get(), tick.get(), lastParallelWorkerCount.get(), controlSavedAt
+                );
+            }
+            persistControlFile(new SimulatorControlState(
+                    running.get(), tick.get(), lastParallelWorkerCount.get(), controlSavedAt
+            ));
+        }
+        long totalMs = elapsedMillis(startedAt);
+        if (totalMs >= 1_000) {
+            log.info(
+                    "Simulator full persistence snapshotMs={} databaseMs={} fileMs={} totalMs={} alerts={} rpaTasks={}",
+                    snapshotMs, databaseMs, fileMs, totalMs, alerts.size(), rpaTasks.size()
+            );
+        }
     }
 
     private NexusSnapshot snapshot(Instant persistedAt) {
@@ -383,6 +441,68 @@ public class NexusStateService {
         } catch (IOException cause) {
             log.warn("Failed to persist Archive Nexus simulator state to {}", stateFile, cause);
         }
+    }
+
+    private void persistControlFile(SimulatorControlState controlState) {
+        try {
+            Path parent = controlStateFile.toAbsolutePath().getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Path tempFile = controlStateFile.resolveSibling(controlStateFile.getFileName() + ".tmp");
+            objectMapper.writeValue(tempFile.toFile(), controlState);
+            Files.move(tempFile, controlStateFile, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException cause) {
+            log.warn("Failed to persist Archive Nexus simulator control state to {}", controlStateFile, cause);
+        }
+    }
+
+    private void restoreControlFile(Instant snapshotSavedAt) {
+        if (!Files.exists(controlStateFile)) {
+            return;
+        }
+        try {
+            SimulatorControlState controlState = objectMapper.readValue(controlStateFile.toFile(), SimulatorControlState.class);
+            if (controlState.updatedAt() != null
+                    && (snapshotSavedAt == null || controlState.updatedAt().isAfter(snapshotSavedAt))) {
+                running.set(controlState.running());
+                tick.set(Math.max(tick.get(), controlState.tick()));
+                lastParallelWorkerCount.set(controlState.lastParallelWorkerCount());
+            }
+        } catch (IOException cause) {
+            log.warn("Failed to restore Archive Nexus simulator control state from {}", controlStateFile, cause);
+        }
+    }
+
+    private Instant restoreDatabaseControlState(Instant snapshotSavedAt) {
+        if (simulatorStateStore == null) {
+            return snapshotSavedAt;
+        }
+        Optional<SimulatorControlStateEntity> storedControl = simulatorStateStore.restoreControlState();
+        if (storedControl.isEmpty()) {
+            return snapshotSavedAt;
+        }
+        SimulatorControlStateEntity controlState = storedControl.get();
+        if (controlState.updatedAt() != null
+                && (snapshotSavedAt == null || controlState.updatedAt().isAfter(snapshotSavedAt))) {
+            running.set(controlState.running());
+            tick.set(Math.max(tick.get(), controlState.tick()));
+            lastParallelWorkerCount.set(controlState.lastParallelWorkerCount());
+            return controlState.updatedAt();
+        }
+        return snapshotSavedAt;
+    }
+
+    private static long elapsedMillis(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
+    }
+
+    private record SimulatorControlState(
+            boolean running,
+            long tick,
+            int lastParallelWorkerCount,
+            Instant updatedAt
+    ) {
     }
 
     private boolean applySnapshot(NexusSnapshot snapshot) {

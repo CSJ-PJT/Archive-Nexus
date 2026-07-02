@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -37,14 +38,25 @@ public class SimulatorStateStore {
     private static final Logger log = LoggerFactory.getLogger(SimulatorStateStore.class);
 
     private final SimulatorStateRepository repository;
+    private final SimulatorControlStateRepository controlRepository;
     private final ObjectMapper objectMapper;
     private final AtomicBoolean dbAvailable = new AtomicBoolean(true);
     private final AtomicReference<Instant> lastSavedAt = new AtomicReference<>();
     private final AtomicLong successfulSaveCount = new AtomicLong();
 
-    public SimulatorStateStore(SimulatorStateRepository repository, ObjectMapper objectMapper) {
+    @Autowired
+    public SimulatorStateStore(
+            SimulatorStateRepository repository,
+            SimulatorControlStateRepository controlRepository,
+            ObjectMapper objectMapper
+    ) {
         this.repository = repository;
+        this.controlRepository = controlRepository;
         this.objectMapper = objectMapper;
+    }
+
+    public SimulatorStateStore(SimulatorStateRepository repository, ObjectMapper objectMapper) {
+        this(repository, null, objectMapper);
     }
 
     public Optional<NexusSnapshot> restore() {
@@ -68,6 +80,37 @@ public class SimulatorStateStore {
             dbAvailable.set(false);
             log.warn("PostgreSQL simulator state save failed", cause);
             return false;
+        }
+    }
+
+    public boolean saveControlState(boolean running, long tick, int workerCount, Instant savedAt) {
+        if (controlRepository == null) {
+            return false;
+        }
+        try {
+            controlRepository.saveAndFlush(new SimulatorControlStateEntity(
+                    CURRENT_STATE_ID, running, tick, workerCount, savedAt
+            ));
+            dbAvailable.set(true);
+            lastSavedAt.set(savedAt);
+            return true;
+        } catch (DataAccessException | IllegalStateException cause) {
+            dbAvailable.set(false);
+            log.warn("PostgreSQL simulator control state save failed", cause);
+            return false;
+        }
+    }
+
+    public Optional<SimulatorControlStateEntity> restoreControlState() {
+        if (controlRepository == null) {
+            return Optional.empty();
+        }
+        try {
+            return controlRepository.findById(CURRENT_STATE_ID);
+        } catch (DataAccessException | IllegalStateException cause) {
+            dbAvailable.set(false);
+            log.warn("PostgreSQL simulator control state restore failed", cause);
+            return Optional.empty();
         }
     }
 
