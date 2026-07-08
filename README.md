@@ -45,6 +45,22 @@ Archive-Nexus
 
 ArchiveOS는 공통 AI 실행 환경을 담당하고 Archive-Nexus는 제조 도메인 로직을 담당합니다.
 
+## Platform Contract
+
+Archive-Nexus는 Archive Suite 안에서 자신이 어떤 Industry Application인지 외부 시스템이 확인할 수 있도록
+`GET /api/platform/manifest`를 제공합니다.
+
+이 manifest는 다음 정보를 포함합니다.
+
+- 제품군, 역할, 계약 버전, 실행 환경
+- Manufacturing Simulator, Multi-Agent Orchestrator, Workflow Contract, RPA Approval Bridge 등 보유 역량
+- ArchiveOS Workflow/Approval/Callback과 Nexus AI Query/Simulator API 계약 표면
+- ArchiveOS 연결 상태와 Backend Atlas 참조 링크
+- ArchiveOS 장애 시 제조 API 지속 응답, Agent 직접 실행 금지, evidence/recommendation/confidence 보존 같은 운영 보장
+
+Backend Atlas는 이 manifest를 포트폴리오/학습 자료의 실제 구현 근거로 연결할 수 있고,
+ArchiveOS는 Nexus를 Managed Industry Application으로 등록할 때 동일 계약 정보를 사용할 수 있습니다.
+
 ## 가상 공장
 
 - **Factory A**: 자동차 부품, 안정적인 생산과 낮은 불량률

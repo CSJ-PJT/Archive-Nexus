@@ -9,7 +9,7 @@ import { ManufacturingAiPanel } from './ManufacturingAiPanel';
 import { TaskOperationsPanel } from './TaskOperationsPanel';
 import type {
   AiDashboardSummary, ArchiveOsInteraction, ArchiveOsStatus, BatchSnapshot, InventoryItem, InventoryTransaction,
-  LogisticsShipment, MaintenanceEvent, NexusTask, Overview, ProductionOrder,
+  LogisticsShipment, MaintenanceEvent, NexusTask, Overview, PlatformManifest, ProductionOrder,
   QualityInspection, RpaTask, SimulatorPersistenceStatus
 } from './types';
 
@@ -42,6 +42,24 @@ const fallbackPersistence: SimulatorPersistenceStatus = {
 const fallbackAiSummary: AiDashboardSummary = {
   totalQueries: 0, runningAgents: 0, agentFailures: 0, agentRpaTasks: 0, recentRecommendation: '최근 권장 조치 없음'
 };
+const fallbackManifest: PlatformManifest = {
+  product: 'archive-nexus',
+  displayName: 'Archive Nexus',
+  productLine: 'Archive Suite',
+  role: 'Manufacturing Industry Application',
+  version: 'unknown',
+  contractVersion: 'industry-app-contract/v1',
+  environment: 'local',
+  repository: 'https://github.com/CSJ-PJT/Archive-Nexus',
+  summary: '제조 도메인 데이터와 운영 판단을 소유하는 ArchiveOS 위의 Industry App입니다.',
+  capabilities: [],
+  contractEndpoints: [],
+  dependencies: [],
+  ownedDomains: [],
+  operationalGuarantees: [],
+  archiveOsStatus: { status: 'UNAVAILABLE', httpStatus: null, message: 'Manifest status fallback', checkedAt: new Date().toISOString() },
+  generatedAt: new Date().toISOString()
+};
 
 export function App() {
   const [tab, setTab] = useState<Tab>('Overview');
@@ -52,6 +70,7 @@ export function App() {
   const [archiveOsStatus, setArchiveOsStatus] = useState<ArchiveOsStatus | null>(null);
   const [persistence, setPersistence] = useState<SimulatorPersistenceStatus>(fallbackPersistence);
   const [aiSummary, setAiSummary] = useState<AiDashboardSummary>(fallbackAiSummary);
+  const [platformManifest, setPlatformManifest] = useState<PlatformManifest>(fallbackManifest);
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState('');
@@ -65,12 +84,14 @@ export function App() {
         message: cause instanceof Error ? cause.message : 'ArchiveOS 상태를 확인할 수 없습니다.',
         checkedAt: new Date().toISOString()
       }));
+      const platformManifestRequest = api.platformManifest().catch(() => fallbackManifest);
       const [nextOverview, productionOrders, qualityInspections, inventoryItems, inventoryTransactions,
         logisticsShipments, maintenanceEvents, rpaTasks, tasks, nextBatchSnapshots,
-        nextArchiveOsInteractions, nextPersistence, nextAiSummary, nextArchiveOsStatus] = await Promise.all([
+        nextArchiveOsInteractions, nextPersistence, nextAiSummary, nextArchiveOsStatus, nextPlatformManifest] = await Promise.all([
         api.overview(), api.productionOrders(), api.qualityInspections(), api.inventoryItems(),
         api.inventoryTransactions(), api.logisticsShipments(), api.maintenanceEvents(), api.rpaTasks(), api.tasks(),
-        api.batchSnapshots(), api.archiveOsInteractions(), api.simulatorPersistence(), api.aiSummary(), archiveOsStatusRequest
+        api.batchSnapshots(), api.archiveOsInteractions(), api.simulatorPersistence(), api.aiSummary(), archiveOsStatusRequest,
+        platformManifestRequest
       ]);
       setOverview(nextOverview);
       setOperations({ productionOrders, qualityInspections, inventoryItems, inventoryTransactions, logisticsShipments, maintenanceEvents, rpaTasks, tasks });
@@ -79,6 +100,7 @@ export function App() {
       setPersistence(nextPersistence);
       setAiSummary(nextAiSummary);
       setArchiveOsStatus(nextArchiveOsStatus);
+      setPlatformManifest(nextPlatformManifest);
       setLastUpdatedAt(new Date());
       setError('');
     } catch (cause) {
@@ -144,7 +166,7 @@ export function App() {
         {tab === 'Maintenance' && <MaintenancePanel events={operations.maintenanceEvents} />}
         {tab === 'Logistics' && <LogisticsPanel shipments={operations.logisticsShipments} />}
         {tab === 'RPA' && <RpaPanel tasks={operations.rpaTasks} runAction={runAction} />}
-        {tab === 'Settings' && <SettingsPanel overview={overview} batchSnapshots={batchSnapshots} archiveOsInteractions={archiveOsInteractions} persistence={persistence} archiveOsStatus={archiveOsStatus} />}
+        {tab === 'Settings' && <SettingsPanel overview={overview} batchSnapshots={batchSnapshots} archiveOsInteractions={archiveOsInteractions} persistence={persistence} archiveOsStatus={archiveOsStatus} manifest={platformManifest} />}
       </>}
     </section>
   </main>;
@@ -201,9 +223,9 @@ function RpaPanel({ tasks, runAction }: { tasks: RpaTask[]; runAction: (action: 
   return <DataPanel icon={<ShieldCheck />} title="ArchiveOS RPA 작업" count={tasks.length}><div className="task-list">{tasks.length === 0 ? <EmptyState /> : tasks.slice().reverse().map((task) => <article key={task.id}><div className="card-heading"><div><strong>{task.id}</strong><span className="muted">{task.factoryId} · {formatDate(task.createdAt)}</span></div><StatusBadge value={task.status} /></div><p>{task.recommendation}</p>{task.status === 'APPROVAL_REQUIRED' && <div className="inline-actions"><button onClick={() => void runAction(() => api.approveRpa(task.id))}>Approve</button><button className="reject" onClick={() => void runAction(() => api.rejectRpa(task.id))}>Reject</button></div>}</article>)}</div></DataPanel>;
 }
 
-function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions, persistence, archiveOsStatus }: { overview: Overview; batchSnapshots: BatchSnapshot[]; archiveOsInteractions: ArchiveOsInteraction[]; persistence: SimulatorPersistenceStatus; archiveOsStatus: ArchiveOsStatus | null }) {
+function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions, persistence, archiveOsStatus, manifest }: { overview: Overview; batchSnapshots: BatchSnapshot[]; archiveOsInteractions: ArchiveOsInteraction[]; persistence: SimulatorPersistenceStatus; archiveOsStatus: ArchiveOsStatus | null; manifest: PlatformManifest }) {
   const latestSnapshot = batchSnapshots[batchSnapshots.length - 1];
-  return <div className="grid"><section className="panel"><PanelTitle icon={<Database />} title="런타임 저장소" /><dl className="summary-list"><Summary label="저장 모드" value={persistence.storageMode} /><Summary label="PostgreSQL" value={persistence.dbAvailable ? 'AVAILABLE' : 'UNAVAILABLE'} /><Summary label="파일 백업" value={persistence.fileSnapshotAvailable ? 'AVAILABLE' : 'EMPTY'} /><Summary label="복구 원본" value={persistence.restoredFrom} /><Summary label="최근 저장" value={formatDate(persistence.lastSavedAt ?? persistence.lastPersistedAt)} /></dl></section><section className="panel"><PanelTitle icon={<Activity />} title="Batch Snapshot" /><dl className="summary-list"><Summary label="스냅샷" value={`${batchSnapshots.length}개`} /><Summary label="최근 tick" value={String(latestSnapshot?.tick ?? 0)} /><Summary label="평균 불량률" value={formatPercent(latestSnapshot?.averageDefectRate ?? 0)} /><Summary label="승인 대기" value={`${latestSnapshot?.pendingApprovalCount ?? 0}건`} /><Summary label="시뮬레이터" value={overview.simulator.running ? 'RUNNING' : 'STOPPED'} /></dl></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="ArchiveOS 연동 상태" /><div className={`integration-detail ${(archiveOsStatus?.status ?? 'UNAVAILABLE').toLowerCase()}`}><StatusBadge value={archiveOsStatus?.status ?? 'CHECKING'} /><div><strong>{archiveOsStatus?.message ?? 'ArchiveOS 상태를 확인하고 있습니다.'}</strong><small>{archiveOsStatus?.checkedAt ? `최근 확인 ${formatDate(archiveOsStatus.checkedAt)}` : '상태 확인 대기'}</small></div></div></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="ArchiveOS 상호작용" count={archiveOsInteractions.length} /><Table headers={['시각', '유형', '공장', '내용']} rows={archiveOsInteractions.slice(-10).reverse().map((item) => [formatDate(item.occurredAt), item.type, item.factoryId ?? 'ArchiveOS', item.payload])} /></section></div>;
+  return <div className="grid"><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="Platform Contract" /><p>{manifest.summary}</p><dl className="summary-list"><Summary label="제품군" value={manifest.productLine} /><Summary label="역할" value={manifest.role} /><Summary label="계약 버전" value={manifest.contractVersion} /><Summary label="환경" value={manifest.environment} /></dl><div className="tag-row">{manifest.capabilities.slice(0, 6).map((capability) => <span className="agent-tag" key={capability.id}>{capability.name}</span>)}</div></section><section className="panel"><PanelTitle icon={<Database />} title="런타임 저장소" /><dl className="summary-list"><Summary label="저장 모드" value={persistence.storageMode} /><Summary label="PostgreSQL" value={persistence.dbAvailable ? 'AVAILABLE' : 'UNAVAILABLE'} /><Summary label="파일 백업" value={persistence.fileSnapshotAvailable ? 'AVAILABLE' : 'EMPTY'} /><Summary label="복구 원본" value={persistence.restoredFrom} /><Summary label="최근 저장" value={formatDate(persistence.lastSavedAt ?? persistence.lastPersistedAt)} /></dl></section><section className="panel"><PanelTitle icon={<Activity />} title="Batch Snapshot" /><dl className="summary-list"><Summary label="스냅샷" value={`${batchSnapshots.length}개`} /><Summary label="최근 tick" value={String(latestSnapshot?.tick ?? 0)} /><Summary label="평균 불량률" value={formatPercent(latestSnapshot?.averageDefectRate ?? 0)} /><Summary label="승인 대기" value={`${latestSnapshot?.pendingApprovalCount ?? 0}건`} /><Summary label="시뮬레이터" value={overview.simulator.running ? 'RUNNING' : 'STOPPED'} /></dl></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="ArchiveOS 연동 상태" /><div className={`integration-detail ${(archiveOsStatus?.status ?? 'UNAVAILABLE').toLowerCase()}`}><StatusBadge value={archiveOsStatus?.status ?? 'CHECKING'} /><div><strong>{archiveOsStatus?.message ?? 'ArchiveOS 상태를 확인하고 있습니다.'}</strong><small>{archiveOsStatus?.checkedAt ? `최근 확인 ${formatDate(archiveOsStatus.checkedAt)}` : '상태 확인 대기'}</small></div></div></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="ArchiveOS 상호작용" count={archiveOsInteractions.length} /><Table headers={['시각', '유형', '공장', '내용']} rows={archiveOsInteractions.slice(-10).reverse().map((item) => [formatDate(item.occurredAt), item.type, item.factoryId ?? 'ArchiveOS', item.payload])} /></section></div>;
 }
 
 function FactoryTable({ overview, operations }: { overview: Overview; operations: OperationsData }) {

@@ -192,6 +192,25 @@ export type SimulatorPersistenceStatus = {
   restoredFrom: string;
 };
 
+export type PlatformManifest = {
+  product: string;
+  displayName: string;
+  productLine: string;
+  role: string;
+  version: string;
+  contractVersion: string;
+  environment: string;
+  repository: string;
+  summary: string;
+  capabilities: Array<{ id: string; name: string; description: string; status: string }>;
+  contractEndpoints: Array<{ method: string; path: string; purpose: string; owner: string }>;
+  dependencies: Array<{ name: string; role: string; url: string; status: string }>;
+  ownedDomains: string[];
+  operationalGuarantees: string[];
+  archiveOsStatus: ArchiveOsStatus;
+  generatedAt: string;
+};
+
 export type Overview = {
   simulator: SimulatorStatus;
   factories: Factory[];

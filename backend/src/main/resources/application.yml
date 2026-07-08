@@ -26,6 +26,10 @@ spring:
       mode: never
 
 archive-nexus:
+  platform:
+    environment: ${ARCHIVE_NEXUS_ENVIRONMENT:local}
+    repository: ${ARCHIVE_NEXUS_REPOSITORY:https://github.com/CSJ-PJT/Archive-Nexus}
+    backend-atlas-url: ${BACKEND_ATLAS_URL:https://github.com/CSJ-PJT/Backend-Atlas}
   archiveos:
     base-url: ${ARCHIVEOS_BASE_URL:http://host.docker.internal:4000}
     integration-token: ${ARCHIVEOS_INTEGRATION_TOKEN:}

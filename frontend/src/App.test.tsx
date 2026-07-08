@@ -12,6 +12,25 @@ vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
     ? []
     : url.includes('/api/ai/summary')
       ? { totalQueries: 0, runningAgents: 0, agentFailures: 0, agentRpaTasks: 0, recentRecommendation: '최근 권장 조치 없음' }
+    : url.includes('/api/platform/manifest')
+      ? {
+          product: 'archive-nexus',
+          displayName: 'Archive Nexus',
+          productLine: 'Archive Suite',
+          role: 'Manufacturing Industry Application',
+          version: 'test',
+          contractVersion: 'industry-app-contract/v1',
+          environment: 'test',
+          repository: 'https://github.com/CSJ-PJT/Archive-Nexus',
+          summary: '제조 도메인 데이터와 운영 판단을 소유하는 ArchiveOS 위의 Industry App입니다.',
+          capabilities: [{ id: 'workflow-contract', name: 'ArchiveOS Workflow Contract', description: 'contract', status: 'ACTIVE' }],
+          contractEndpoints: [],
+          dependencies: [],
+          ownedDomains: [],
+          operationalGuarantees: [],
+          archiveOsStatus: archiveStatus,
+          generatedAt: new Date().toISOString()
+        }
     : url.includes('/api/archiveos/status')
       ? archiveStatus
     : url.includes('/api/simulator/persistence')
@@ -50,6 +69,14 @@ describe('App', () => {
     expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
     expect(await screen.findByText('공장 운영 현황')).toBeInTheDocument();
     expect(await screen.findByText('ArchiveOS DEGRADED')).toBeInTheDocument();
+  });
+
+  it('shows the Nexus platform contract surface', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+    expect(await screen.findByText('Platform Contract')).toBeInTheDocument();
+    expect(screen.getByText('Archive Suite')).toBeInTheDocument();
+    expect(screen.getByText('ArchiveOS Workflow Contract')).toBeInTheDocument();
   });
 
   it('opens a domain operations view', async () => {
