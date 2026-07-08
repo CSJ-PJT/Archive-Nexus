@@ -57,10 +57,19 @@ The file snapshot at `data/archive-nexus-state.json` remains as fallback/local b
 
 ## Nexus 운영 작업
 
-`nexus_tasks`는 `MANUFACTURING_QUERY`, `SIMULATOR_TICK` 작업과 `PENDING`, `RUNNING`,
-`SUCCESS`, `FAILED`, `CANCELLED` 상태, 실행 횟수, 결과와 오류, 감사 시각을 저장한다.
+`nexus_tasks`는 `MANUFACTURING_QUERY`, `SIMULATOR_TICK`, `SCENARIO_RECOVERY` 작업과
+`DRAFT`, `PENDING`, `ANALYZING`, `WAITING_APPROVAL`, `APPROVED`, `RUNNING`, `VERIFYING`,
+`SUCCESS`, `FAILED`, `REJECTED`, `CANCELLED`, `RETRY_REQUESTED` 상태를 저장한다.
+결과에는 `evidence_json`, `recommendation_json`, `confidence`, `correlation_id`, `workflow_id`,
+`approval_id`, `rpa_task_id`가 포함된다.
 `nexus_task_logs`는 작업별 INFO/WARN/ERROR 로그를 시간순으로 저장한다. 두 테이블은 simulator
 snapshot과 분리된 JPA/Flyway 영속 모델이다.
-| `created_at` | 실행 시각 |
+
+## Audit와 점진적 Aggregate 분리
+
+`nexus_audit_logs`는 actor, action, reason, task/correlation/workflow ID, 세부 JSON과 발생 시각을 저장한다.
+`production_aggregates`, `inspection_aggregates`, `maintenance_aggregates`, `approval_aggregates`는
+현재 simulator snapshot에서 계산한 최신 bounded projection이다. 원본 이력 전체를 복제하지 않으며
+향후 독립 Domain Aggregate로 전환할 때 호환 경계로 사용한다.
 
 현재 프로젝트의 runtime JSON 저장 규칙과 동일하게 구조화 목록은 text JSON으로 저장하며, 기존 DB 데이터를 삭제하거나 `simulator_state` 구조를 변경하지 않는다.

@@ -1,0 +1,21 @@
+package com.archivenexus.backend.archiveos;
+
+import com.archivenexus.backend.task.NexusTaskEntity;
+import com.fasterxml.jackson.databind.*;
+import org.springframework.beans.factory.annotation.Value;import org.springframework.stereotype.Component;
+import java.net.URI;import java.net.http.*;import java.time.Duration;import java.util.*;
+
+@Component
+public class HttpArchiveOsWorkflowClient implements ArchiveOsWorkflowClient {
+    private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build();
+    private final ObjectMapper mapper; private final String baseUrl; private final String integrationToken; private final int attempts; private final Duration timeout;
+    public HttpArchiveOsWorkflowClient(ObjectMapper mapper,@Value("${archive-nexus.archiveos.base-url:http://host.docker.internal:4000}") String baseUrl,@Value("${archive-nexus.archiveos.integration-token:}") String integrationToken,@Value("${archive-nexus.archiveos.workflow.retry-attempts:3}") int attempts,@Value("${archive-nexus.archiveos.timeout-ms:2000}") long timeoutMs){this.mapper=mapper;this.baseUrl=baseUrl.replaceAll("/+$","");this.integrationToken=integrationToken==null?"":integrationToken.trim();this.attempts=Math.max(1,attempts);this.timeout=Duration.ofMillis(Math.max(250,timeoutMs));}
+    @Override public WorkflowRef create(NexusTaskEntity task){Map<String,Object> body=new LinkedHashMap<>();body.put("title",task.title());body.put("description",task.question()==null?task.title():task.question());body.put("priority","high");body.put("target_project","Archive-Nexus");body.put("scope_files",List.of());body.put("max_iterations",task.maxAttempts());body.put("metadata",Map.of("source","archive-nexus","source_task_id",task.id(),"correlation_id",task.correlationId(),"requested_by",task.requestedBy()));return ref(call("POST","/api/tasks",body).path("data"));}
+    @Override public WorkflowRef requestApproval(String id){return ref(call("PATCH","/api/tasks/"+id,Map.of("status","pm_decision_required")).path("data"));}
+    @Override public WorkflowRef get(String id){return ref(call("GET","/api/tasks/"+id,null).path("data"));}
+    @Override public void callback(String id,WorkflowCallback value){call("POST","/api/tasks/"+id+"/callback",value);}
+    @Override public List<Map<String,Object>> events(String id){JsonNode data=call("GET","/api/tasks/"+id+"/events",null).path("data");return mapper.convertValue(data,mapper.getTypeFactory().constructCollectionType(List.class,Map.class));}
+    private WorkflowRef ref(JsonNode node){if(node.isMissingNode()||node.isNull())throw new ArchiveOsWorkflowException("ArchiveOS workflow response is missing data.");JsonNode task=node.has("task")?node.path("task"):node;return new WorkflowRef(task.path("id").asText(),task.path("status").asText(),nullable(task,"latest_pm_decision_id"));}
+    private String nullable(JsonNode node,String name){JsonNode value=node.path(name);return value.isMissingNode()||value.isNull()?null:value.asText();}
+    private JsonNode call(String method,String path,Object body){RuntimeException last=null;for(int i=1;i<=attempts;i++){try{HttpRequest.Builder builder=HttpRequest.newBuilder(URI.create(baseUrl+path)).timeout(timeout).header("Accept","application/json");if(!integrationToken.isBlank())builder.header("X-ArchiveOS-Integration-Token",integrationToken);if(body==null)builder.method(method,HttpRequest.BodyPublishers.noBody());else builder.header("Content-Type","application/json").method(method,HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)));HttpResponse<String> response=client.send(builder.build(),HttpResponse.BodyHandlers.ofString());if(response.statusCode()<200||response.statusCode()>=300)throw new ArchiveOsWorkflowException("ArchiveOS "+method+" "+path+" returned "+response.statusCode()+": "+response.body());return mapper.readTree(response.body());}catch(Exception error){last=error instanceof RuntimeException runtime?runtime:new ArchiveOsWorkflowException("ArchiveOS request failed",error);if(i<attempts){try{Thread.sleep(150L*i);}catch(InterruptedException interrupted){Thread.currentThread().interrupt();throw new ArchiveOsWorkflowException("ArchiveOS retry interrupted",interrupted);}}}}throw new ArchiveOsWorkflowException("ArchiveOS unavailable after "+attempts+" attempt(s)",last);}
+}

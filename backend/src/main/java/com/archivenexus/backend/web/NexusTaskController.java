@@ -12,6 +12,7 @@ import java.util.List;
  @GetMapping("/{id}") ResponseEntity<TaskDetailResponse> one(@PathVariable String id){return ResponseEntity.of(tasks.findById(id));}
  @GetMapping("/{id}/logs") List<TaskLogResponse> logs(@PathVariable String id){return tasks.findLogs(id);}
  @PostMapping("/{id}/run") ResponseEntity<TaskResponse> run(@PathVariable String id){return ResponseEntity.of(tasks.run(id));}
+ @PostMapping("/{id}/sync") ResponseEntity<TaskResponse> sync(@PathVariable String id){return ResponseEntity.of(tasks.sync(id));}
  @PostMapping("/{id}/cancel") ResponseEntity<TaskResponse> cancel(@PathVariable String id){return ResponseEntity.of(tasks.cancel(id));}
  @PostMapping("/{id}/retry") ResponseEntity<TaskResponse> retry(@PathVariable String id){return ResponseEntity.of(tasks.retry(id));}
 }

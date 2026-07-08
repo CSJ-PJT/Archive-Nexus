@@ -36,6 +36,18 @@ class IntentRouterTest {
     }
 
     @Test
+    void routesInventoryAndLogisticsQuestions() {
+        assertThat(routerWithoutModel().route("안전재고 부족과 출하 지연을 확인해줘"))
+                .containsExactly(Intent.INVENTORY, Intent.LOGISTICS);
+    }
+
+    @Test
+    void addsCrossDomainIntentForManufacturingCausalChain() {
+        assertThat(routerWithoutModel().route("품질 불량으로 생산과 재고, 출하에 생긴 근본 원인을 분석해줘"))
+                .contains(Intent.PRODUCTION, Intent.QUALITY, Intent.INVENTORY, Intent.LOGISTICS, Intent.CROSS_DOMAIN);
+    }
+
+    @Test
     void returnsUnknownForUnclassifiedQuestion() {
         assertThat(routerWithoutModel().route("오늘 운영 보고서를 예쁘게 정리해줘"))
                 .containsExactly(Intent.UNKNOWN);

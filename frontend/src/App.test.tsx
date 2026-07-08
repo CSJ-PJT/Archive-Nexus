@@ -66,7 +66,13 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: '질문 실행' })).toBeInTheDocument();
     expect(screen.getByText('최근 Query History')).toBeInTheDocument();
   });
-  it('renders the task execution and log workspace', async () => { render(<App />); fireEvent.click(await screen.findByRole('button',{name:'Tasks'})); expect(await screen.findByText('운영 작업 생성')).toBeInTheDocument(); expect(screen.getByText('작업 상세와 실행 로그')).toBeInTheDocument(); expect(screen.getByRole('button',{name:'작업 만들기'})).toBeInTheDocument(); });
+  it('renders the task execution and evidence workspace', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Tasks' }));
+    expect(await screen.findByText('운영 작업 생성')).toBeInTheDocument();
+    expect(screen.getByText('작업 상세와 실행 근거')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '초안 만들기' })).toBeInTheDocument();
+  });
   it('keeps operations visible when ArchiveOS is unavailable', async () => {
     archiveStatus = { status: 'UNAVAILABLE', httpStatus: 503, message: 'ArchiveOS is unreachable', checkedAt: new Date().toISOString() };
     render(<App />);

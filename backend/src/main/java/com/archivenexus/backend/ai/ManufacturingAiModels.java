@@ -14,6 +14,9 @@ public final class ManufacturingAiModels {
         PRODUCTION,
         QUALITY,
         MAINTENANCE,
+        INVENTORY,
+        LOGISTICS,
+        CROSS_DOMAIN,
         UNKNOWN
     }
 

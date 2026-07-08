@@ -35,6 +35,7 @@ export const api = {
   createTask: (body: CreateNexusTask) => request<NexusTask>('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   taskLogs: (id: string) => request<NexusTaskLog[]>(`/api/tasks/${id}/logs`),
   runTask: (id: string) => request<NexusTask>(`/api/tasks/${id}/run`, { method: 'POST' }),
+  syncTask: (id: string) => request<NexusTask>(`/api/tasks/${id}/sync`, { method: 'POST' }),
   cancelTask: (id: string) => request<NexusTask>(`/api/tasks/${id}/cancel`, { method: 'POST' }),
   retryTask: (id: string) => request<NexusTask>(`/api/tasks/${id}/retry`, { method: 'POST' }),
   simulatorStatus: () => request<SimulatorStatus>('/api/simulator/status'),

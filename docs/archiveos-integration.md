@@ -1,6 +1,22 @@
-# ArchiveOS 연동 계획
+# ArchiveOS 양방향 Workflow 연동
 
-Archive Nexus는 ArchiveOS를 직접 포함하지 않는다. `ArchiveOsClient` interface를 통해 플랫폼 기능을 호출한다.
+Archive Nexus는 ArchiveOS를 직접 포함하지 않는다. 기존 Interaction adapter와 별도의 `ArchiveOsWorkflowClient` 계약을 통해 플랫폼 기능을 호출한다.
+
+```mermaid
+sequenceDiagram
+    participant N as Archive-Nexus
+    participant O as ArchiveOS Workflow
+    participant P as PM
+    N->>O: Workflow 생성 (correlationId)
+    N->>O: 승인 요청
+    P->>O: approve / reject
+    N->>O: 상태 동기화
+    N->>N: 승인된 Action 실행 및 검증
+    N->>O: Result Callback (Evidence/Recommendation/Confidence)
+    O->>O: History Event 저장
+```
+
+승인 대기 작업은 기본 5초 간격으로 동기화한다. 호출은 2초 timeout, 최대 3회 bounded retry를 사용한다. ArchiveOS가 응답하지 않으면 Nexus 작업은 `RETRY_REQUESTED`로 남고 제조 조회·시뮬레이터는 계속 동작한다.
 
 ## Runtime 상태 확인
 

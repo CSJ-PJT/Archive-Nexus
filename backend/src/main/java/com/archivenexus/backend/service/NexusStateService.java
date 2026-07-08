@@ -268,6 +268,29 @@ public class NexusStateService {
         return archiveOsClient.interactions();
     }
 
+    public synchronized Map<String, Object> activateDemoScenario(String requestedFactoryId) {
+        String factoryId = requestedFactoryId == null || requestedFactoryId.isBlank() ? "FAC-C" : requestedFactoryId;
+        Factory factory = factory(factoryId).orElseThrow(() -> new IllegalArgumentException("Factory not found: " + factoryId));
+        ProductionLine line = factory.lines().get(0);
+        Machine machine = line.machines().get(0);
+        Lot lot = lots.stream().filter(value -> value.factoryId().equals(factoryId)).findFirst().orElseGet(() -> {
+            Lot created = new Lot(id("LOT"), factoryId, line.product(), 120, true); lots.add(created); return created;
+        });
+        sensorMetrics.add(new SensorMetric(id("SNS"), factoryId, machine.id(), tick.get(), Instant.now(), machine.vibrationThreshold() * 1.35, machine.temperatureThreshold() * 1.18, machine.currentThreshold() * 1.1));
+        inspections.add(new QualityInspection(id("QI"), lot.id(), factoryId, 0.12, "FAIL"));
+        productionOrders.add(new ProductionOrder(id("PO"), factoryId, line.product(), 1000, 520, "DELAYED"));
+        inventoryItems.stream().filter(value -> value.id().startsWith(factoryId)).findFirst().ifPresent(item -> {
+            inventoryItems.remove(item); inventoryItems.add(new InventoryItem(item.id(), item.name(), item.type(), Math.max(0, item.safetyStock() - 100), item.safetyStock()));
+        });
+        maintenanceEvents.add(new MaintenanceEvent(id("MNT"), factoryId, machine.id(), AlertSeverity.CRITICAL, "시나리오 센서 이상", "OPEN"));
+        shipments.add(new LogisticsShipment(id("SHP"), factoryId, "Priority Customer", "DELAYED", 1));
+        List<String> categories = List.of("MAINTENANCE", "QUALITY", "INVENTORY", "LOGISTICS");
+        categories.forEach(category -> alerts.add(new FactoryAlert(id("ALT"), factoryId, AlertSeverity.CRITICAL, category, "Cross-domain demo scenario: " + category, Instant.now())));
+        persistState();
+        return Map.of("scenarioId", "sensor-quality-inventory-logistics-recovery", "factoryId", factoryId,
+                "chain", List.of("SENSOR_ANOMALY", "QUALITY_DEFECT", "INVENTORY_SHORTAGE", "SHIPMENT_DELAY", "AI_ANALYSIS", "PM_APPROVAL", "RPA_EXECUTION", "RECOVERY"));
+    }
+
     public int anomalyCount() {
         return alerts.size();
     }

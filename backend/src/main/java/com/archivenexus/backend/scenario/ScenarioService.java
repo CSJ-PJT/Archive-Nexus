@@ -1,0 +1,7 @@
+package com.archivenexus.backend.scenario;
+import com.archivenexus.backend.service.NexusStateService;import com.archivenexus.backend.persistence.DomainAggregateProjectionService;import com.archivenexus.backend.task.NexusTaskModels.*;import com.archivenexus.backend.task.NexusTaskService;import org.springframework.stereotype.Service;import java.util.Map;
+@Service public class ScenarioService{
+ private final NexusStateService nexus;private final NexusTaskService tasks;private final DomainAggregateProjectionService projections;public ScenarioService(NexusStateService nexus,NexusTaskService tasks,DomainAggregateProjectionService projections){this.nexus=nexus;this.tasks=tasks;this.projections=projections;}
+ public ScenarioResult run(String scenarioId,String factoryId,String requestedBy){if(!"sensor-quality-inventory-logistics-recovery".equals(scenarioId))throw new IllegalArgumentException("Unknown scenario: "+scenarioId);Map<String,Object> context=nexus.activateDemoScenario(factoryId);projections.projectManufacturing();TaskResponse created=tasks.create(new CreateTaskRequest("Cross-domain recovery scenario",TaskType.SCENARIO_RECOVERY,(String)context.get("factoryId"),"센서 이상부터 품질, 생산, 재고, 정비, 출하 지연까지 근본 원인과 복구 조치를 종합 분석해줘",requestedBy,3));TaskResponse routed=tasks.run(created.id()).orElse(created);return new ScenarioResult(scenarioId,context,routed);}
+ public record ScenarioResult(String scenarioId,Map<String,Object> context,TaskResponse task){}
+}
