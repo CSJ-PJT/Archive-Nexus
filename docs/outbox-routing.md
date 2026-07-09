@@ -27,16 +27,17 @@ POST /api/outbox/events/publish?target=auto&dryRun=true
 - `ledger`: publish only Archive-Ledger target events.
 - `dryRun=true`: calculate route and target counts without external HTTP calls.
 
-## Disabled Integrations
+## Automatic Publishing
 
-Default configuration keeps both integrations disabled.
+Docker/local demo configuration enables both downstream integrations and runs scheduled `AUTO` routing. Logistics events go to Archive-Logistics first; direct finance events go to Archive-Ledger.
 
 ```env
-ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED=false
-ARCHIVE_INTEGRATIONS_LEDGER_ENABLED=false
+ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED=true
+ARCHIVE_INTEGRATIONS_LEDGER_ENABLED=true
+ARCHIVE_INTEGRATIONS_ROUTING_PUBLISH_INTERVAL_MS=15000
 ```
 
-When disabled, publish calls do not call external services. The response reports skipped candidates, and events remain available for later publish.
+Set either integration flag to `false` when a downstream service must be intentionally isolated. When disabled, publish calls do not call that external service. The response reports skipped candidates, and events remain available for later publish.
 
 ## Failure Handling
 
@@ -60,4 +61,3 @@ GET /api/outbox/events?targetService=LEDGER
 GET /api/outbox/events?status=FAILED
 GET /api/outbox/events?status=PENDING_RETRY
 ```
-

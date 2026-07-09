@@ -67,6 +67,52 @@ GET /api/platform/manifest
 
 These APIs keep returning a Nexus-level response even if an external service is disabled or unavailable.
 
+## Archive-Logistics Daily Settlement Callback
+
+Archive-Nexus receives synthetic daily manufacturing settlement callbacks from Archive-Logistics.
+The callback stores evidence and calculated cost impact for operations review; it does not mutate
+factory production, quality, maintenance, or inventory source data.
+
+```http
+POST /api/logistics/settlements/daily
+POST /api/logistics/settlements/daily/bulk
+GET /api/logistics/settlements/daily
+GET /api/logistics/settlements/daily?factoryId=FAC-A
+GET /api/logistics/settlements/daily/{settlementId}
+GET /api/logistics/settlements/summary
+```
+
+Minimal request:
+
+```json
+{
+  "settlementId": "LGS-SETTLE-20260709-FAC-A",
+  "idempotencyKey": "LOGISTICS:DAILY:2026-07-09:FAC-A",
+  "source": "Archive-Logistics",
+  "schemaVersion": 1,
+  "settlementDate": "2026-07-09",
+  "factoryId": "FAC-A",
+  "currency": "KRW",
+  "totalShipments": 12,
+  "delayedShipments": 2,
+  "heldShipments": 1,
+  "totalQuantity": 1440,
+  "totalLogisticsCost": 3800000,
+  "manufacturingImpactCost": 720000,
+  "onTimeRate": 0.8333,
+  "evidence": {
+    "basis": "synthetic daily route cost summary"
+  },
+  "payload": {
+    "demoData": true
+  },
+  "occurredAt": "2026-07-09T10:00:00Z"
+}
+```
+
+Repeated `settlementId` or `idempotencyKey` is treated as duplicate-safe and returns `duplicate=true`
+without creating another settlement row.
+
 ## Simulator
 
 ```http
@@ -89,4 +135,3 @@ GET /api/maintenance
 ```
 
 These endpoints are used by the frontend dashboard and should remain available even when external integrations are down.
-

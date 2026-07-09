@@ -76,3 +76,55 @@ Archive-Logistics should treat repeated `eventId` or `idempotencyKey` as duplica
 
 Archive-Logistics calculates logistics cost and emits a finalized logistics cost event to Archive-Ledger.
 Nexus does not directly send `LOGISTICS_DISPATCHED` to Ledger by default.
+
+## Archive-Logistics to Nexus daily settlement callback
+
+Archive-Logistics can return a synthetic daily manufacturing settlement to Nexus after route, delay,
+hold, and logistics cost calculations are finalized.
+
+```http
+POST {ARCHIVE_NEXUS_BASE_URL}/api/logistics/settlements/daily
+POST {ARCHIVE_NEXUS_BASE_URL}/api/logistics/settlements/daily/bulk
+```
+
+The callback is an inbox contract. Nexus stores the settlement, evidence, and cost impact for
+operations review. Nexus does not directly edit production, quality, maintenance, or inventory
+source records from this callback.
+
+Required idempotency fields:
+
+- `settlementId`
+- `idempotencyKey`
+- `settlementDate`
+- `factoryId`
+
+Repeated `settlementId` or `idempotencyKey` is accepted as duplicate-safe and does not create a
+second settlement record.
+
+Example:
+
+```json
+{
+  "settlementId": "LGS-SETTLE-20260709-FAC-A",
+  "idempotencyKey": "LOGISTICS:DAILY:2026-07-09:FAC-A",
+  "source": "Archive-Logistics",
+  "schemaVersion": 1,
+  "settlementDate": "2026-07-09",
+  "factoryId": "FAC-A",
+  "currency": "KRW",
+  "totalShipments": 12,
+  "delayedShipments": 2,
+  "heldShipments": 1,
+  "totalQuantity": 1440,
+  "totalLogisticsCost": 3800000,
+  "manufacturingImpactCost": 720000,
+  "onTimeRate": 0.8333,
+  "evidence": {
+    "basis": "synthetic daily route cost summary"
+  },
+  "payload": {
+    "demoData": true
+  },
+  "occurredAt": "2026-07-09T10:00:00Z"
+}
+```

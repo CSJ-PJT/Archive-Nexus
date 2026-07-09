@@ -46,15 +46,19 @@ Factory Runtime
 | `GET` | `/api/outbox/events/{eventId}` | Single outbox event lookup |
 | `POST` | `/api/outbox/events/generate?count=100&type=logistics` | Generate synthetic events |
 | `POST` | `/api/outbox/events/publish?target=auto&dryRun=true` | Route or publish outbox candidates |
+| `POST` | `/api/logistics/settlements/daily` | Receive synthetic daily manufacturing settlement from Archive-Logistics |
+| `GET` | `/api/logistics/settlements/summary` | Inspect received Logistics settlement callback status |
 | `GET` | `/api/archiveos/status` | ArchiveOS availability state |
 | `GET` | `/api/platform/manifest` | Archive Suite application contract |
 
 ## Operational Principles
 
-- `dryRun=true` must be used before actual publish in demos or manual operations.
+- Docker/local demo configuration enables Archive-Logistics and Archive-Ledger publishing by default.
+- A scheduled publisher runs `target=auto` on the configured interval and keeps pending events moving.
+- `dryRun=true` is still available for diagnostics or manual safety checks.
 - `retry_count`, `last_error`, `last_publish_target`, and `last_publish_attempt_at` preserve retry evidence.
 - `target_service` records whether an event is routed to `LOGITICS`, `LEDGER`, `NONE`, or `UNKNOWN`.
-- `ARCHIVE_INTEGRATIONS_*_ENABLED=false` is the default; Nexus still starts and manufacturing APIs remain available.
+- Set `ARCHIVE_INTEGRATIONS_*_ENABLED=false` to isolate Nexus when a downstream service must be held.
 - External service failures must not terminate simulator, dashboard, or manufacturing APIs.
 
 ## Local Run
@@ -74,11 +78,15 @@ docker compose ps
 Default external integration values:
 
 ```env
-ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED=false
+ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED=true
 ARCHIVE_INTEGRATIONS_LOGITICS_BASE_URL=http://host.docker.internal:8092
-ARCHIVE_INTEGRATIONS_LEDGER_ENABLED=false
+ARCHIVE_INTEGRATIONS_LEDGER_ENABLED=true
 ARCHIVE_INTEGRATIONS_LEDGER_BASE_URL=http://host.docker.internal:18080
+ARCHIVE_INTEGRATIONS_LOGITICS_TIMEOUT_MS=30000
+ARCHIVE_INTEGRATIONS_LEDGER_TIMEOUT_MS=30000
 ARCHIVE_INTEGRATIONS_ROUTING_ALLOW_LEDGER_DIRECT_FALLBACK_FOR_LOGISTICS=false
+ARCHIVE_INTEGRATIONS_ROUTING_PUBLISH_INTERVAL_MS=15000
+SPRING_TASK_SCHEDULING_POOL_SIZE=4
 ```
 
 Do not commit `.env`, tokens, webhooks, private keys, or local data directories.
@@ -90,18 +98,21 @@ curl.exe "http://localhost:8080/api/outbox/summary"
 curl.exe "http://localhost:8080/api/integrations/summary"
 
 curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=20&type=logistics"
-curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=auto&dryRun=true"
+curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=auto"
 
 curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=20&type=ledger"
-curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger&dryRun=true"
+curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger"
+
+curl.exe "http://localhost:8080/api/logistics/settlements/summary"
 ```
 
 Expected behavior:
 
 - Logistics generation creates events routed to `LOGITICS`.
 - Ledger generation creates events routed to `LEDGER`.
-- `dryRun=true` returns routing counts without external HTTP calls.
-- Disabled external services are reported as `DISABLED`, while Nexus remains `HEALTHY`.
+- Archive-Logistics daily settlement callbacks are stored idempotently and do not mutate manufacturing source data.
+- Enabled downstream services receive published events automatically or through the manual publish commands above.
+- Disabled external services are reported as `DISABLED`; Nexus remains `HEALTHY`.
 
 ## Verification
 
@@ -148,4 +159,3 @@ curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger"
 - React, Vite, TypeScript, Nginx
 - Docker Compose
 - Actuator, Prometheus, Grafana
-
