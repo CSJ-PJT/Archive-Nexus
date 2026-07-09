@@ -107,7 +107,7 @@ docker compose ps
 ## Synthetic Domain Event Outbox
 
 Archive-Nexus는 실제 금융/개인정보 없이 synthetic 제조·모빌리티 운영 이벤트를 `nexus_outbox_event`에 저장하고
-Archive-Logitics 또는 Archive-Ledger로 라우팅 publish할 수 있다.
+Archive-Logistics 또는 Archive-Ledger로 라우팅 publish할 수 있다.
 
 - `GET /api/outbox/events`
 - `GET /api/outbox/events/{eventId}`
@@ -122,11 +122,11 @@ Ledger가 unavailable이면 제조 API는 계속 응답하고 outbox event는 `P
 
 Archive-Nexus는 synthetic outbox event를 `eventType` 기준으로 라우팅한다.
 
-- Archive-Logitics 대상: `LOGISTICS_DISPATCHED`, `URGENT_DELIVERY_REQUESTED`, `SHIPMENT_HOLD_RELEASED`, `MATERIAL_TRANSFER_REQUESTED`, `QUALITY_REPLACEMENT_SHIPMENT`
+- Archive-Logistics 대상: `LOGISTICS_DISPATCHED`, `URGENT_DELIVERY_REQUESTED`, `SHIPMENT_HOLD_RELEASED`, `MATERIAL_TRANSFER_REQUESTED`, `QUALITY_REPLACEMENT_SHIPMENT`
 - Archive-Ledger 직접 대상: `PRODUCTION_COMPLETED`, `MATERIAL_CONSUMED`, `MAINTENANCE_COMPLETED`, `QUALITY_DEFECT_DETECTED`, `EMERGENCY_PURCHASE_REQUESTED`, `QUALITY_CLAIM_CHARGED`, `CORPORATE_CARD_USED`, `VENDOR_PAYMENT_REQUESTED`
 - 내부 처리/스킵 대상: `SHIPMENT_HOLD_CREATED`
 
-기본값은 외부 연동 비활성화다. Archive-Logitics 또는 Archive-Ledger가 꺼져 있어도 Nexus는 정상 기동한다.
+기본값은 외부 연동 비활성화다. Archive-Logistics 또는 Archive-Ledger가 꺼져 있어도 Nexus는 정상 기동한다.
 
 ```env
 ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED=false
@@ -135,6 +135,9 @@ ARCHIVE_INTEGRATIONS_LEDGER_ENABLED=false
 ARCHIVE_INTEGRATIONS_LEDGER_BASE_URL=http://host.docker.internal:18080
 ARCHIVE_INTEGRATIONS_ROUTING_ALLOW_LEDGER_DIRECT_FALLBACK_FOR_LOGISTICS=false
 ```
+
+외부 서비스명은 `Archive-Logistics`로 표기한다. 다만 기존 API와 운영 설정 호환성을 위해
+`LOGITICS`, `logitics`, `ARCHIVE_INTEGRATIONS_LOGITICS_*` 키는 유지한다.
 
 ```powershell
 curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=100&type=logistics"
@@ -147,9 +150,9 @@ curl.exe "http://localhost:8080/api/integrations/summary"
 자세한 계약 문서:
 
 - [Outbox routing](docs/outbox-routing.md)
-- [Nexus to Archive-Logitics contract](docs/nexus-logitics-contract.md)
+- [Nexus to Archive-Logistics contract](docs/nexus-logitics-contract.md)
 - [Nexus to Archive-Ledger contract](docs/nexus-ledger-contract.md)
-- [Demo: Nexus to Logitics to Ledger](docs/demo-nexus-to-logitics-to-ledger.md)
+- [Demo: Nexus to Logistics to Ledger](docs/demo-nexus-to-logitics-to-ledger.md)
 
 ArchiveOS 상태는 `GET /api/archiveos/status`에서 확인한다. 기본 연동 주소는
 `http://host.docker.internal:4000`이며, ArchiveOS 장애는 Nexus 제조 데이터 API와 화면 로딩을

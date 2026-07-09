@@ -7,7 +7,7 @@ POST http://localhost:8080/api/outbox/events/generate?count=100&type=ledger
 ### Dry-run publish
 POST http://localhost:8080/api/outbox/events/publish?target=auto&dryRun=true
 
-### Publish only Archive-Logitics target events
+### Publish only Archive-Logistics target events
 POST http://localhost:8080/api/outbox/events/publish?target=logitics
 
 ### Publish only Archive-Ledger target events
@@ -25,7 +25,7 @@ GET http://localhost:8080/api/outbox/events?status=FAILED
 ### Pending retry events
 GET http://localhost:8080/api/outbox/events?status=PENDING_RETRY
 
-### Logitics target events
+### Logistics target events
 GET http://localhost:8080/api/outbox/events?targetService=LOGITICS
 
 ### Ledger target events

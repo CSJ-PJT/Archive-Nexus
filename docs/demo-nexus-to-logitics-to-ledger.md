@@ -1,11 +1,11 @@
-# Demo: Nexus to Logitics to Ledger
+# Demo: Nexus to Logistics to Ledger
 
-This scenario shows the intended ecosystem flow without putting Archive-Logitics or Archive-Ledger
+This scenario shows the intended ecosystem flow without putting Archive-Logistics or Archive-Ledger
 inside the Archive-Nexus Docker Compose file.
 
 ## 1. Start external services
 
-Start Archive-Logitics on `8092` and Archive-Ledger on `18080` from their own repositories.
+Start Archive-Logistics on `8092` and Archive-Ledger on `18080` from their own repositories.
 
 Expected health checks:
 
@@ -44,7 +44,7 @@ curl.exe "http://localhost:8080/api/outbox/summary"
 curl.exe "http://localhost:8080/api/integrations/summary"
 ```
 
-## 5. Publish to Archive-Logitics
+## 5. Publish to Archive-Logistics
 
 ```powershell
 curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=logitics"
@@ -52,7 +52,7 @@ curl.exe "http://localhost:8092/api/operations/summary"
 curl.exe "http://localhost:8092/api/outbox/summary"
 ```
 
-Archive-Logitics should calculate route/cost and then publish finalized logistics cost events to Archive-Ledger.
+Archive-Logistics should calculate route/cost and then publish finalized logistics cost events to Archive-Ledger.
 
 ## 6. Generate direct Ledger events
 
@@ -82,7 +82,7 @@ curl.exe "http://localhost:8080/api/outbox/events?status=PENDING_RETRY"
 flowchart LR
   A[Archive-Nexus Factory Tick] --> B[Nexus Outbox]
   B --> C{Routing Policy}
-  C -->|Logistics events| D[Archive-Logitics]
+  C -->|Logistics events| D[Archive-Logistics]
   D --> E[Final logistics cost event]
   E --> F[Archive-Ledger]
   C -->|Cost events| F

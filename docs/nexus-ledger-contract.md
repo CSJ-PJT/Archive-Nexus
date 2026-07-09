@@ -1,7 +1,7 @@
 # Nexus to Archive-Ledger Contract
 
 Archive-Nexus sends only direct synthetic financial/cost events to Archive-Ledger.
-Logistics events are routed to Archive-Logitics first and should reach Ledger only after logistics cost confirmation.
+Logistics events are routed to Archive-Logistics first and should reach Ledger only after logistics cost confirmation.
 
 ## Endpoint
 
@@ -64,7 +64,7 @@ Archive-Ledger currently accepts an array of events:
 ## Excluded logistics event
 
 `LOGISTICS_DISPATCHED` is not sent to Ledger directly by default.
-It must be routed to Archive-Logitics, where route and cost are calculated before Ledger settlement.
+It must be routed to Archive-Logistics, where route and cost are calculated before Ledger settlement.
 
 Legacy fallback can be enabled only for testing:
 

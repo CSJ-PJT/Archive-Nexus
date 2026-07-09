@@ -104,5 +104,5 @@
 
 ## 7) 잔여 검증 항목
 
-- `Archive-Logitics`, `Archive-Ledger`를 실제 동작 상태로 올린 연동 smoke(실서비스 경유 publish) 검증은 별도 환경에서 추가 실행 필요
+- `Archive-Logistics`, `Archive-Ledger`를 실제 동작 상태로 올린 연동 smoke(실서비스 경유 publish) 검증은 별도 환경에서 추가 실행 필요
 

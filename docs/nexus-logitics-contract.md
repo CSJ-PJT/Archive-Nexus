@@ -1,7 +1,11 @@
-# Nexus to Archive-Logitics Contract
+# Nexus to Archive-Logistics Contract
 
-Archive-Nexus sends logistics events to Archive-Logitics for synthetic route, ETA, delay, reroute,
+Archive-Nexus sends logistics events to Archive-Logistics for synthetic route, ETA, delay, reroute,
 and logistics cost calculation.
+
+The public service name is `Archive-Logistics`. The file name, environment keys, and target values
+that contain `logitics` or `LOGITICS` are kept for compatibility with the existing Nexus API and
+database routing values.
 
 ## Endpoint
 
@@ -60,7 +64,7 @@ ARCHIVE_INTEGRATIONS_LOGITICS_BASE_URL=http://host.docker.internal:8092
 ## Idempotency key
 
 The key is synthetic and contains no real customer, card, or account data.
-Archive-Logitics should treat repeated `eventId` or `idempotencyKey` as duplicate-safe.
+Archive-Logistics should treat repeated `eventId` or `idempotencyKey` as duplicate-safe.
 
 ## Retry and timeout
 
@@ -70,5 +74,5 @@ Archive-Logitics should treat repeated `eventId` or `idempotencyKey` as duplicat
 
 ## Expected downstream behavior
 
-Archive-Logitics calculates logistics cost and emits a finalized logistics cost event to Archive-Ledger.
+Archive-Logistics calculates logistics cost and emits a finalized logistics cost event to Archive-Ledger.
 Nexus does not directly send `LOGISTICS_DISPATCHED` to Ledger by default.

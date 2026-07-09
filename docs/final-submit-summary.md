@@ -3,11 +3,11 @@
 ## 1. 핵심 요약
 
 Archive-Nexus는 제조 이벤트를 `eventType` 기반으로 라우팅하는 Outbox 백엔드로,  
-물류 이벤트는 Archive-Logitics, 비용/정산성 이벤트는 Archive-Ledger로 분기한다.
+물류 이벤트는 Archive-Logistics, 비용/정산성 이벤트는 Archive-Ledger로 분기한다.
 
 ## 2. 라우팅 정책
 
-- **Logitics 대상**
+- **Logistics 대상**
   - `LOGISTICS_DISPATCHED`, `URGENT_DELIVERY_REQUESTED`, `SHIPMENT_HOLD_RELEASED`,
     `MATERIAL_TRANSFER_REQUESTED`, `QUALITY_REPLACEMENT_SHIPMENT`
 - **Ledger 대상**
@@ -16,6 +16,9 @@ Archive-Nexus는 제조 이벤트를 `eventType` 기반으로 라우팅하는 Ou
     `QUALITY_CLAIM_CHARGED`, `CORPORATE_CARD_USED`, `VENDOR_PAYMENT_REQUESTED`
 - **NONE**
   - `SHIPMENT_HOLD_CREATED`는 비용 확정 전 단계라 외부 publish 제외
+
+외부 표기는 `Archive-Logistics`로 통일했다. 내부 호환성을 위해 API 파라미터와 환경변수의
+`logitics`/`LOGITICS` 값은 유지한다.
 
 ## 3. 장애 격리
 
@@ -47,6 +50,5 @@ Archive-Nexus는 제조 이벤트를 `eventType` 기반으로 라우팅하는 Ou
 
 ## 7. 참고 문구(포트폴리오)
 
-“Archive-Nexus는 제조·출하 이벤트를 `eventType` 기반 라우팅으로 분기해 물류는 Archive-Logitics, 비용·정산성 이벤트는 Archive-Ledger로 전달합니다.  
+“Archive-Nexus는 제조·출하 이벤트를 `eventType` 기반 라우팅으로 분기해 물류는 Archive-Logistics, 비용·정산성 이벤트는 Archive-Ledger로 전달합니다.  
 외부 장애가 제조 API로 전달되지 않도록 target별 retry, last_error, dry-run, routing summary를 제공합니다.”
-
