@@ -78,3 +78,26 @@
 
 - 현재는 dry-run 기반 검증 중심이며, Archive-Logitics/Archive-Ledger 구동 환경에서 실제 publish 통합 smoke는 별도 환경에서 추가 실행 필요.
 - 라우팅 정책 자체는 API/요약 응답에서 일관되게 노출되며, 기본 스모크 기준에는 적합.
+## External Integration Smoke (enabled services)
+
+- Started with `ARCHIVE_INTEGRATIONS_*_ENABLED=true` only for one-time validation.
+- `POST /api/integrations/summary` : `logitics.enabled=true`, `ledger.enabled=true`, `status=HEALTHY`
+- `POST /api/outbox/events/generate?count=30&type=logistics` : `targets.LOGITICS=30`
+- `POST /api/outbox/events/generate?count=30&type=ledger` : `targets.LEDGER=30`
+- `POST /api/outbox/events/publish?target=logitics` : `totalCandidates=6`, `published=6`, `failed=0`
+- `POST /api/outbox/events/publish?target=ledger` : `totalCandidates=44`, `published=0`, `failed=44`
+- `GET /api/outbox/events?status=PENDING_RETRY&targetService=LEDGER` : `count=44`
+- `GET /api/outbox/events?status=PUBLISHED&targetService=LOGITICS` : `count=6`
+
+### Side-check on target services
+
+- `http://localhost:8092/api/operations/summary`
+  - `receivedEvents=207`, `processedEvents=207`, `failedEvents=0`, `duplicateEvents=6`
+- `http://localhost:18080/api/operations/summary`
+  - `receivedEvents=164`, `transactions=164`, `duplicates=246`, `eventsReceivedFromNexus=50`, `eventsReceivedFromLogitics=114`
+
+### Result
+
+- Logistics path integration was validated by actual publish (`LOGITICS` target)
+- Ledger path returned repeated `failed` publish with `pending_retry` accumulation; this indicates contract/receiver compatibility needs alignment in Ledger endpoint handling.
+- After validation, service was restored to `*ENABLED=false` default, `archive-nexus-backend` and existing smoke docs remain unchanged.
