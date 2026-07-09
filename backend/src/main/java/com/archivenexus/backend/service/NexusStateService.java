@@ -23,9 +23,12 @@ import com.archivenexus.backend.domain.DomainModels.RpaTaskStatus;
 import com.archivenexus.backend.domain.DomainModels.SensorMetric;
 import com.archivenexus.backend.domain.DomainModels.SimulatorPersistenceStatus;
 import com.archivenexus.backend.domain.DomainModels.SimulatorStatus;
+import com.archivenexus.backend.outbox.OutboxEventService;
+import com.archivenexus.backend.outbox.OutboxModels.EventType;
 import com.archivenexus.backend.persistence.SimulatorStateStore;
 import com.archivenexus.backend.persistence.SimulatorControlStateEntity;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -60,6 +63,7 @@ public class NexusStateService {
     private static final Logger log = LoggerFactory.getLogger(NexusStateService.class);
 
     private final MockArchiveOsClient archiveOsClient;
+    private final OutboxEventService outboxEvents;
     private final ObjectMapper objectMapper;
     private final SimulatorStateStore simulatorStateStore;
     private final Random random;
@@ -94,11 +98,25 @@ public class NexusStateService {
             MockArchiveOsClient archiveOsClient,
             SimulatorStateStore simulatorStateStore,
             ObjectMapper objectMapper,
+            long seed,
+            boolean persistenceEnabled,
+            Path stateFile
+    ) {
+        this(archiveOsClient, null, simulatorStateStore, objectMapper, seed, persistenceEnabled, stateFile);
+    }
+
+    @Autowired
+    public NexusStateService(
+            MockArchiveOsClient archiveOsClient,
+            OutboxEventService outboxEvents,
+            SimulatorStateStore simulatorStateStore,
+            ObjectMapper objectMapper,
             @Value("${archive-nexus.simulator.seed}") long seed,
             @Value("${archive-nexus.simulator.persistence-enabled:true}") boolean persistenceEnabled,
             @Value("${archive-nexus.simulator.state-file:data/archive-nexus-state.json}") Path stateFile
     ) {
         this.archiveOsClient = archiveOsClient;
+        this.outboxEvents = outboxEvents;
         this.simulatorStateStore = simulatorStateStore;
         this.objectMapper = objectMapper;
         this.random = new Random(seed);
@@ -578,27 +596,89 @@ public class NexusStateService {
 
         SensorMetric metric = new SensorMetric(id("MET"), factory.id(), machine.id(), currentTick, Instant.now(), vibration, temperature, current);
         sensorMetrics.add(metric);
-        productionOrders.add(new ProductionOrder(id("PO"), factory.id(), line.product(), target, produced, produced < target * 0.8 ? "DELAYED" : "RUNNING"));
+        ProductionOrder productionOrder = new ProductionOrder(id("PO"), factory.id(), line.product(), target, produced, produced < target * 0.8 ? "DELAYED" : "RUNNING");
+        productionOrders.add(productionOrder);
+        emitSyntheticEvent(EventType.PRODUCTION_COMPLETED, "ProductionOrder", productionOrder.id(),
+                "tick:" + currentTick + ":production:" + productionOrder.id(), Map.of(
+                        "factoryId", factory.id(),
+                        "productionOrderId", productionOrder.id(),
+                        "product", productionOrder.product(),
+                        "targetQuantity", productionOrder.targetQuantity(),
+                        "producedQuantity", productionOrder.producedQuantity(),
+                        "estimatedCost", Math.max(150_000, produced * 1_200),
+                        "currency", "KRW",
+                        "synthetic", true,
+                        "requiresApproval", false
+                ));
 
         Lot lot = new Lot(id("LOT"), factory.id(), line.product(), produced, defectRate >= 0.03);
         lots.add(lot);
-        inspections.add(new QualityInspection(id("QI"), lot.id(), factory.id(), defectRate, defectRate >= 0.03 ? "FAILED" : "PASSED"));
+        QualityInspection inspection = new QualityInspection(id("QI"), lot.id(), factory.id(), defectRate, defectRate >= 0.03 ? "FAILED" : "PASSED");
+        inspections.add(inspection);
 
         InventoryItem item = inventoryItems.stream().filter(inventory -> inventory.id().startsWith(factory.id())).findFirst().orElseThrow();
         int consumed = Math.max(20, produced / 3);
         inventoryItems.remove(item);
         InventoryItem updatedItem = new InventoryItem(item.id(), item.name(), item.type(), Math.max(0, item.quantity() - consumed), item.safetyStock());
         inventoryItems.add(updatedItem);
-        inventoryTransactions.add(new InventoryTransaction(id("ITX"), updatedItem.id(), factory.id(), "OUTBOUND", consumed, Instant.now()));
+        InventoryTransaction inventoryTransaction = new InventoryTransaction(id("ITX"), updatedItem.id(), factory.id(), "OUTBOUND", consumed, Instant.now());
+        inventoryTransactions.add(inventoryTransaction);
+        emitSyntheticEvent(EventType.MATERIAL_CONSUMED, "InventoryTransaction", inventoryTransaction.id(),
+                "tick:" + currentTick + ":material:" + inventoryTransaction.id(), Map.of(
+                        "factoryId", factory.id(),
+                        "itemId", updatedItem.id(),
+                        "quantity", consumed,
+                        "estimatedCost", consumed * 950,
+                        "currency", "KRW",
+                        "synthetic", true,
+                        "requiresApproval", false
+                ));
 
         String shipmentStatus = produced < target * 0.82 || randomChance(0.08) ? "DELAYED" : "IN_TRANSIT";
-        shipments.add(new LogisticsShipment(id("SHP"), factory.id(), "Central Warehouse", shipmentStatus, shipmentStatus.equals("DELAYED") ? 1 : 3));
+        LogisticsShipment shipment = new LogisticsShipment(id("SHP"), factory.id(), "Central Warehouse", shipmentStatus, shipmentStatus.equals("DELAYED") ? 1 : 3);
+        shipments.add(shipment);
+        emitSyntheticEvent(shipmentStatus.equals("DELAYED") ? EventType.SHIPMENT_HOLD_CREATED : EventType.LOGISTICS_DISPATCHED,
+                "LogisticsShipment", shipment.id(), "tick:" + currentTick + ":shipment:" + shipment.id(), Map.of(
+                        "factoryId", factory.id(),
+                        "shipmentId", shipment.id(),
+                        "destination", shipment.destination(),
+                        "status", shipment.status(),
+                        "estimatedCost", shipmentStatus.equals("DELAYED") ? 1_200_000 : 450_000,
+                        "currency", "KRW",
+                        "synthetic", true,
+                        "requiresApproval", false
+                ));
 
         if (vibration >= machine.vibrationThreshold() || temperature >= machine.temperatureThreshold() || current >= machine.currentThreshold()) {
-            maintenanceEvents.add(new MaintenanceEvent(id("MNT"), factory.id(), machine.id(), AlertSeverity.CRITICAL, "설비 센서 임계치 초과", "OPEN"));
+            MaintenanceEvent maintenanceEvent = new MaintenanceEvent(id("MNT"), factory.id(), machine.id(), AlertSeverity.CRITICAL, "설비 센서 임계치 초과", "OPEN");
+            maintenanceEvents.add(maintenanceEvent);
+            emitSyntheticEvent(EventType.MAINTENANCE_COMPLETED, "MaintenanceEvent", maintenanceEvent.id(),
+                    "tick:" + currentTick + ":maintenance:" + maintenanceEvent.id(), Map.of(
+                            "factoryId", factory.id(),
+                            "equipmentId", machine.id(),
+                            "vendorId", "VENDOR-MAINT-" + factory.id().substring(factory.id().length() - 1),
+                            "severity", "HIGH",
+                            "estimatedCost", 4_800_000,
+                            "currency", "KRW",
+                            "reason", "synthetic equipment sensor threshold exceeded",
+                            "synthetic", true,
+                            "requiresApproval", true
+                    ));
             raiseAlert(factory.id(), AlertSeverity.CRITICAL, "MAINTENANCE", "설비 진동/온도/전류 임계치 초과");
         }
         if (defectRate >= 0.03) {
+            emitSyntheticEvent(EventType.QUALITY_DEFECT_DETECTED, "QualityInspection", inspection.id(),
+                    "tick:" + currentTick + ":quality:" + inspection.id(), Map.of(
+                            "factoryId", factory.id(),
+                            "lotId", lot.id(),
+                            "defectRate", inspection.defectRate(),
+                            "severity", "HIGH",
+                            "estimatedCost", Math.max(900_000, produced * 2_500),
+                            "currency", "KRW",
+                            "reason", "synthetic quality inspection failed",
+                            "synthetic", true,
+                            "requiresApproval", true
+                    ));
             raiseAlert(factory.id(), AlertSeverity.CRITICAL, "QUALITY", "Lot 품질 검사 실패 및 출하 보류");
         }
         if (updatedItem.quantity() <= updatedItem.safetyStock()) {
@@ -621,6 +701,18 @@ public class NexusStateService {
         rpaTasks.add(task);
         if (approvalRequired) {
             archiveOsClient.requestApproval(task);
+        }
+    }
+
+    private void emitSyntheticEvent(EventType type, String aggregateType, String aggregateId,
+                                    String idempotencyKey, Map<String, Object> payload) {
+        if (outboxEvents == null) {
+            return;
+        }
+        try {
+            outboxEvents.emit(type, aggregateType, aggregateId, idempotencyKey, payload, Instant.now());
+        } catch (RuntimeException error) {
+            log.warn("Synthetic outbox event emission failed type={} aggregateId={}: {}", type, aggregateId, error.getMessage());
         }
     }
 

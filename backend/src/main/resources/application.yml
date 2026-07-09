@@ -30,6 +30,12 @@ archive-nexus:
     environment: ${ARCHIVE_NEXUS_ENVIRONMENT:local}
     repository: ${ARCHIVE_NEXUS_REPOSITORY:https://github.com/CSJ-PJT/Archive-Nexus}
     backend-atlas-url: ${BACKEND_ATLAS_URL:https://github.com/CSJ-PJT/Backend-Atlas}
+  ledger:
+    enabled: ${ARCHIVE_LEDGER_ENABLED:false}
+    base-url: ${ARCHIVE_LEDGER_BASE_URL:http://host.docker.internal:18080}
+    timeout-ms: ${ARCHIVE_LEDGER_TIMEOUT_MS:2000}
+    publish-interval-ms: ${ARCHIVE_LEDGER_PUBLISH_INTERVAL_MS:15000}
+    publish-batch-size: ${ARCHIVE_LEDGER_PUBLISH_BATCH_SIZE:100}
   archiveos:
     base-url: ${ARCHIVEOS_BASE_URL:http://host.docker.internal:4000}
     integration-token: ${ARCHIVEOS_INTEGRATION_TOKEN:}

@@ -104,6 +104,20 @@ docker compose ps
 `POST /api/tasks/{id}/retry`를 제공한다. 데모 시나리오는
 `POST /api/scenarios/sensor-quality-inventory-logistics-recovery/run`으로 시작한다.
 
+## Synthetic Domain Event Outbox
+
+Archive-Nexus는 실제 금융/개인정보 없이 synthetic 제조·모빌리티 운영 이벤트를 `nexus_outbox_event`에 저장하고
+Archive-Ledger로 publish할 수 있다.
+
+- `GET /api/outbox/events`
+- `GET /api/outbox/events/{eventId}`
+- `POST /api/outbox/events/generate?count=1000`
+- `POST /api/outbox/events/publish`
+- `GET /api/outbox/summary`
+
+Ledger가 unavailable이면 제조 API는 계속 응답하고 outbox event는 `PENDING_RETRY` 또는 `FAILED` 상태로 남는다.
+`retry_count`와 `last_error`를 통해 재처리 상태를 확인한다.
+
 ArchiveOS 상태는 `GET /api/archiveos/status`에서 확인한다. 기본 연동 주소는
 `http://host.docker.internal:4000`이며, ArchiveOS 장애는 Nexus 제조 데이터 API와 화면 로딩을
 중단시키지 않고 `DEGRADED` 또는 `UNAVAILABLE` 상태로 표시된다.
