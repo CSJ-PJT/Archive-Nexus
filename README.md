@@ -188,6 +188,8 @@ Archive Nexus는 ArchiveOS와 동일한 공식 `A` 마크를 사용합니다. `N
 
 README, Sidebar, Header와 브라우저 아이콘은 동일한 공식 마크를 사용합니다.
 
+Archive-Nexus는 제조·출하 이벤트를 생성하고 Outbox 라우팅 정책에 따라 물류 이벤트는 Archive-Logistics로, 정비·구매·품질·카드성 비용 이벤트는 Archive-Ledger로 전달하는 Manufacturing AX 백엔드입니다. 외부 서비스 장애가 제조 API로 전파되지 않도록 target별 retry, dry-run, routing summary, last_error를 제공합니다.
+
 ## License
 
 라이선스 정책은 프로젝트 운영 방침에 따라 추후 정의합니다.

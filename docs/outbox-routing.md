@@ -4,6 +4,8 @@ Archive-Nexus no longer treats every synthetic manufacturing event as a direct f
 The outbox routes each event by `eventType` so that logistics events first go to Archive-Logitics,
 and cost/settlement events go directly to Archive-Ledger.
 
+Archive-Nexus는 제조·출하 이벤트를 생성하고 Outbox 라우팅 정책에 따라 물류 이벤트는 Archive-Logistics로, 정비·구매·품질·카드성 비용 이벤트는 Archive-Ledger로 전달하는 Manufacturing AX 백엔드입니다. 외부 서비스 장애가 제조 API로 전파되지 않도록 target별 retry, dry-run, routing summary, last_error를 제공합니다.
+
 ## Why not send everything to Ledger?
 
 `LOGISTICS_DISPATCHED` is not a finalized cost. Route selection, ETA, delay risk, reroute cost,
