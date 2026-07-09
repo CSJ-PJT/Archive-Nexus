@@ -1,55 +1,79 @@
-# Archive Nexus 아키텍처
+# Archive-Nexus Architecture
 
-Archive Nexus는 ArchiveOS에 내장되지 않는 별도 제조 AX 애플리케이션이다. 제조 도메인 상태와 시뮬레이션은 Archive Nexus가 소유하고, AI Runtime, RAG, RPA 승인, Batch, 관제 이벤트는 ArchiveOS API 또는 SDK를 통해 요청한다.
+Archive-Nexus is a Manufacturing AX service that owns factory simulation, manufacturing domain state, and synthetic event routing. ArchiveOS, Archive-Logistics, and Archive-Ledger are external systems; Nexus must keep manufacturing APIs available even when those systems are degraded or unavailable.
 
-## 구성
+## Runtime Components
 
-- `backend`: Spring Boot 기반 API와 시뮬레이터 런타임
-- `frontend`: React 기반 공장 관제 화면
-- `backend/src/main/resources/schema.sql`: PostgreSQL 기준 도메인 스키마
-- `MockArchiveOsClient`: ArchiveOS 실제 연동 전까지 사용하는 adapter
-- `docker-compose.yml`: backend, frontend, postgres 로컬 실행 구성
+| Component | Responsibility |
+| --- | --- |
+| `backend` | Spring Boot API, simulator runtime, JPA persistence, outbox publisher |
+| `frontend` | React/Vite operations dashboard |
+| `postgres` | Simulator state, task history, AI query history, outbox events |
+| `prometheus` | Backend metrics scraping |
+| `grafana` | Local operations dashboard |
 
-## 데이터 흐름
+## Data Ownership
 
-1. 시뮬레이터가 Factory A/B/C의 센서, 생산, 품질, 재고, 물류 데이터를 생성한다.
-2. 각 factory tick은 backend executor에서 병렬로 실행된다.
-3. 규칙 기반 임계치가 정상 데이터와 이상 이벤트를 구분한다.
-4. 정상 데이터는 API 조회와 배치 집계 대상으로 유지한다.
-5. 이상 이벤트만 ArchiveOS adapter로 전달된다.
-6. adapter는 RAG 근거를 조회하고 RPA Task를 생성한다.
-7. Critical 이벤트는 `APPROVAL_REQUIRED` 상태로 남아 승인 API를 기다린다.
-8. 정상 운영 데이터는 5 tick마다 Batch Snapshot으로 집계된다.
+- Nexus owns Factory A/B/C production, quality, maintenance, inventory, logistics, task, and simulator state.
+- Nexus owns `nexus_outbox_event` until an event is published or permanently failed.
+- Archive-Logistics owns route, ETA, delivery risk, and logistics cost calculation after receiving logistics events.
+- Archive-Ledger owns transaction normalization, approval state, ledger entries, settlement, and reconciliation after receiving financial/cost events.
+- ArchiveOS owns control tower status, workflow approval, RAG evidence, and operational interaction logs.
 
-## RPA 개입 흐름
+## Event Flow
 
-```text
-Factory Event
-→ Rule Detection
-→ FactoryAlert
-→ ArchiveOsClient.requestRagAnalysis
-→ ArchiveOsClient.createRpaTask
-→ approval_required 또는 completed
+```mermaid
+flowchart LR
+  A[Factory Runtime] --> B[Domain Service]
+  B --> C[Nexus Outbox]
+  C --> D{Routing Policy}
+  D -->|Logistics events| E[Archive-Logistics]
+  D -->|Cost events| F[Archive-Ledger]
+  D -->|Pre-cost state| G[NONE / SKIPPED]
+  C --> H[ArchiveOS Summary Polling]
 ```
 
-## 관측 API
+## Routing Contract
 
-- `GET /api/batch/snapshots`: Spring Batch 역할의 주기 집계 결과를 조회한다.
-- `GET /api/archiveos/interactions`: ArchiveOS mock adapter가 받은 이벤트, RAG 조회, RPA 생성, 승인 요청을 조회한다.
+The route is derived from `eventType` and stored as `target_service`.
 
-이 두 API를 함께 보면 정상 데이터는 배치 집계로만 흐르고, 이상 이벤트가 발생한 경우에만 ArchiveOS AI/RAG/RPA 경로가 호출되는지 확인할 수 있다.
+- `LOGITICS`: logistics events routed to Archive-Logistics. The spelling is retained for compatibility with existing DB/API values.
+- `LEDGER`: cost and settlement events routed directly to Archive-Ledger.
+- `NONE`: internal events with no confirmed external cost.
+- `UNKNOWN`: unsupported event types.
 
-`GET /api/simulator/status`의 `parallelWorkerCount`는 마지막 tick에서 병렬 실행된 factory worker 수를 보여준다.
+## Persistence
 
-## Runtime State Recovery
+Key tables are managed by Flyway migrations:
 
-Archive Nexus는 PostgreSQL/JPA 기반 runtime snapshot을 운영 저장소로 사용한다.
+- `simulator_state`
+- `simulator_control_state`
+- `nexus_task`
+- `nexus_task_log`
+- `ai_query_history`
+- `audit_log`
+- `nexus_outbox_event`
 
-- 운영 저장소: PostgreSQL `simulator_state` 테이블
-- Local backup/fallback 파일: `data/archive-nexus-state.json`
-- 저장 시점: simulator start/stop, tick 생성, RPA 승인/거절, 애플리케이션 종료
-- 복구 순서: PostgreSQL snapshot을 먼저 복구하고, DB 상태가 없거나 DB 접근에 실패한 경우에만 파일 snapshot을 사용한다.
-- 복구 대상: tick, factory 상태, 센서/생산/품질/재고/물류/정비/RPA/Batch/ArchiveOS interaction 상태
-- 관측 API: `GET /api/simulator/persistence`
+Outbox fields used for operations:
 
-`GET /api/simulator/persistence`는 `storageMode`, `dbAvailable`, `fileSnapshotAvailable`, `lastSavedAt`, `restoredFrom`을 반환한다. 이 구조는 Codex 개입 없이 프로세스 재시작 후에도 가상 공장 생태계가 이전 상태에서 계속 진행되도록 하기 위한 운영 계층이다.
+- `event_id`
+- `idempotency_key`
+- `event_type`
+- `target_service`
+- `routing_status`
+- `status`
+- `retry_count`
+- `last_error`
+- `last_publish_target`
+- `last_publish_attempt_at`
+
+## Failure Isolation
+
+Nexus treats external integrations as optional. If Archive-Logistics, Archive-Ledger, or ArchiveOS is disabled or unavailable:
+
+- simulator and manufacturing APIs remain available;
+- dashboard keeps loading manufacturing data;
+- publish attempts are skipped, dry-run, pending retry, or failed by target;
+- failure evidence is stored on outbox events;
+- `/api/outbox/summary` and `/api/integrations/summary` remain available for control tower polling.
+
