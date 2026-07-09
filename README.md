@@ -46,6 +46,9 @@ Factory Runtime
 | `GET` | `/api/outbox/events/{eventId}` | Single outbox event lookup |
 | `POST` | `/api/outbox/events/generate?count=100&type=logistics` | Generate synthetic events |
 | `POST` | `/api/outbox/events/publish?target=auto&dryRun=true` | Route or publish outbox candidates |
+| `GET` | `/api/nexus-economy/summary` | Synthetic revenue, cost, profit, cash balance, and bankruptcy risk summary |
+| `POST` | `/api/economy/events/external` | Receive synthetic fee events billed by Archive-Logistics or Archive-Ledger |
+| `POST` | `/api/nexus-economy/daily-close?date=YYYY-MM-DD` | Create a synthetic daily profit snapshot |
 | `GET` | `/api/archiveos/status` | ArchiveOS availability state |
 | `GET` | `/api/platform/manifest` | Archive Suite application contract |
 
@@ -56,6 +59,39 @@ Factory Runtime
 - `target_service` records whether an event is routed to `LOGITICS`, `LEDGER`, `NONE`, or `UNKNOWN`.
 - `ARCHIVE_INTEGRATIONS_*_ENABLED=false` is the default; Nexus still starts and manufacturing APIs remain available.
 - External service failures must not terminate simulator, dashboard, or manufacturing APIs.
+- Economy APIs use synthetic amounts only. They are designed for ArchiveOS Survival Mode and must not be treated as real customer revenue or real financial data.
+- External fee events include `eventId`, `idempotencyKey`, `simulationRunId`, `settlementCycleId`, `correlationId`, `causationId`, `hopCount`, and `maxHop` to prevent duplicate processing and recursive fee loops.
+
+## Nexus Economy Model
+
+Archive-Nexus recognizes synthetic production and shipment revenue while recording manufacturing costs and external service fees. ArchiveOS can poll `/api/nexus-economy/summary` to calculate Survival Mode profitability and bankruptcy risk.
+
+```text
+Production / Shipment
+  -> Nexus revenue events
+
+Material / Maintenance / Quality / Operations
+  -> Nexus internal cost events
+
+Archive-Logistics / Archive-Ledger fee billing
+  -> /api/economy/events/external
+  -> Nexus external cost events
+  -> /api/nexus-economy/summary
+```
+
+Supported external fee sources:
+
+- `Archive-Logistics`
+- `Archive-Ledger`
+
+Supported external fee cost types:
+
+- `LOGISTICS_SERVICE_FEE_PAID`
+- `LOGISTICS_DAILY_SETTLEMENT_FEE_PAID`
+- `LEDGER_SETTLEMENT_AGENCY_FEE_PAID`
+- `LEDGER_RECONCILIATION_FEE_PAID`
+
+See [Nexus economy model](docs/nexus-economy-model.md) and [external fee contract](docs/nexus-external-fee-contract.md).
 
 ## Local Run
 
@@ -94,6 +130,7 @@ curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=auto&dr
 
 curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=20&type=ledger"
 curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger&dryRun=true"
+curl.exe "http://localhost:8080/api/nexus-economy/summary"
 ```
 
 Expected behavior:
@@ -140,6 +177,9 @@ curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger"
 - [API reference](docs/api-reference.md)
 - [Smoke test](docs/smoke-test.md)
 - [Operations runbook](docs/operations-runbook.md)
+- [Nexus economy model](docs/nexus-economy-model.md)
+- [Nexus external fee contract](docs/nexus-external-fee-contract.md)
+- [Game economy integration](docs/game-economy-nexus.md)
 
 ## Tech Stack
 

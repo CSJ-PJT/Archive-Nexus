@@ -177,7 +177,8 @@ public class OutboxEventService {
                 "Archive-Nexus",
                 "HEALTHY",
                 integrationStatesWithHealth(),
-                new RoutingConfig("AUTO", router.allowLedgerDirectFallbackForLogistics())
+                new RoutingConfig("AUTO", router.allowLedgerDirectFallbackForLogistics()),
+                "/api/nexus-economy/summary"
         );
     }
 

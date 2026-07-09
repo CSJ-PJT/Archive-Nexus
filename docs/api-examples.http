@@ -19,6 +19,32 @@ GET http://localhost:8080/api/outbox/summary
 ### Integration summary
 GET http://localhost:8080/api/integrations/summary
 
+### Nexus economy summary
+GET http://localhost:8080/api/nexus-economy/summary
+
+### Receive synthetic Archive-Logistics fee
+POST http://localhost:8080/api/economy/events/external
+Content-Type: application/json
+
+{
+  "eventId": "LOG-FEE-20260709-000001",
+  "idempotencyKey": "Archive-Logistics:LOGISTICS_SERVICE_FEE_PAID:LOG-FEE-20260709-000001",
+  "simulationRunId": "SIM-DEMO-001",
+  "settlementCycleId": "CYCLE-20260709",
+  "correlationId": "corr-demo-001",
+  "causationId": "route-cost-001",
+  "hopCount": 1,
+  "maxHop": 8,
+  "sourceService": "Archive-Logistics",
+  "costType": "LOGISTICS_SERVICE_FEE_PAID",
+  "costAmount": 125000,
+  "currency": "KRW",
+  "reason": "Synthetic logistics service fee billed to Nexus"
+}
+
+### Nexus daily close
+POST http://localhost:8080/api/nexus-economy/daily-close?date=2026-07-09
+
 ### Failed events
 GET http://localhost:8080/api/outbox/events?status=FAILED
 
@@ -36,3 +62,4 @@ GET http://localhost:8080/api/outbox/events?targetService=LEDGER
 # curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=auto&dryRun=true"
 # curl.exe "http://localhost:8080/api/outbox/summary"
 # curl.exe "http://localhost:8080/api/integrations/summary"
+# curl.exe "http://localhost:8080/api/nexus-economy/summary"

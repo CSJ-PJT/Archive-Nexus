@@ -25,6 +25,7 @@ import com.archivenexus.backend.domain.DomainModels.SimulatorPersistenceStatus;
 import com.archivenexus.backend.domain.DomainModels.SimulatorStatus;
 import com.archivenexus.backend.outbox.OutboxEventService;
 import com.archivenexus.backend.outbox.OutboxModels.EventType;
+import com.archivenexus.backend.nexuseconomy.NexusEconomyService;
 import com.archivenexus.backend.persistence.SimulatorStateStore;
 import com.archivenexus.backend.persistence.SimulatorControlStateEntity;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,6 +38,7 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -64,6 +66,7 @@ public class NexusStateService {
 
     private final MockArchiveOsClient archiveOsClient;
     private final OutboxEventService outboxEvents;
+    private final NexusEconomyService economy;
     private final ObjectMapper objectMapper;
     private final SimulatorStateStore simulatorStateStore;
     private final Random random;
@@ -102,13 +105,14 @@ public class NexusStateService {
             boolean persistenceEnabled,
             Path stateFile
     ) {
-        this(archiveOsClient, null, simulatorStateStore, objectMapper, seed, persistenceEnabled, stateFile);
+        this(archiveOsClient, null, null, simulatorStateStore, objectMapper, seed, persistenceEnabled, stateFile);
     }
 
     @Autowired
     public NexusStateService(
             MockArchiveOsClient archiveOsClient,
             OutboxEventService outboxEvents,
+            NexusEconomyService economy,
             SimulatorStateStore simulatorStateStore,
             ObjectMapper objectMapper,
             @Value("${archive-nexus.simulator.seed}") long seed,
@@ -117,6 +121,7 @@ public class NexusStateService {
     ) {
         this.archiveOsClient = archiveOsClient;
         this.outboxEvents = outboxEvents;
+        this.economy = economy;
         this.simulatorStateStore = simulatorStateStore;
         this.objectMapper = objectMapper;
         this.random = new Random(seed);
@@ -610,6 +615,7 @@ public class NexusStateService {
                         "synthetic", true,
                         "requiresApproval", false
                 ));
+        recordProductionEconomy(productionOrder, factory.id(), line.product(), currentTick, produced);
 
         Lot lot = new Lot(id("LOT"), factory.id(), line.product(), produced, defectRate >= 0.03);
         lots.add(lot);
@@ -633,6 +639,7 @@ public class NexusStateService {
                         "synthetic", true,
                         "requiresApproval", false
                 ));
+        recordMaterialEconomy(inventoryTransaction.id(), currentTick, BigDecimal.valueOf(consumed * 950L));
 
         String shipmentStatus = produced < target * 0.82 || randomChance(0.08) ? "DELAYED" : "IN_TRANSIT";
         LogisticsShipment shipment = new LogisticsShipment(id("SHP"), factory.id(), "Central Warehouse", shipmentStatus, shipmentStatus.equals("DELAYED") ? 1 : 3);
@@ -658,6 +665,7 @@ public class NexusStateService {
                         Map.entry("synthetic", true),
                         Map.entry("requiresApproval", false)
                 ));
+        recordShipmentEconomy(shipment.id(), currentTick, produced, shipmentStatus.equals("DELAYED"));
 
         if (vibration >= machine.vibrationThreshold() || temperature >= machine.temperatureThreshold() || current >= machine.currentThreshold()) {
             MaintenanceEvent maintenanceEvent = new MaintenanceEvent(id("MNT"), factory.id(), machine.id(), AlertSeverity.CRITICAL, "설비 센서 임계치 초과", "OPEN");
@@ -675,6 +683,7 @@ public class NexusStateService {
                             "requiresApproval", true
                     ));
             raiseAlert(factory.id(), AlertSeverity.CRITICAL, "MAINTENANCE", "설비 진동/온도/전류 임계치 초과");
+            recordMaintenanceEconomy(maintenanceEvent.id(), currentTick, BigDecimal.valueOf(4_800_000));
         }
         if (defectRate >= 0.03) {
             emitSyntheticEvent(EventType.QUALITY_DEFECT_DETECTED, "QualityInspection", inspection.id(),
@@ -690,12 +699,43 @@ public class NexusStateService {
                             "requiresApproval", true
                     ));
             raiseAlert(factory.id(), AlertSeverity.CRITICAL, "QUALITY", "Lot 품질 검사 실패 및 출하 보류");
+            recordQualityEconomy(inspection.id(), currentTick, BigDecimal.valueOf(Math.max(900_000, produced * 2_500L)));
         }
         if (updatedItem.quantity() <= updatedItem.safetyStock()) {
             raiseAlert(factory.id(), AlertSeverity.WARNING, "INVENTORY", "안전재고 이하로 재고 감소");
         }
         if (shipmentStatus.equals("DELAYED")) {
             raiseAlert(factory.id(), AlertSeverity.WARNING, "LOGISTICS", "납기 지연 위험 발생");
+        }
+    }
+
+    private void recordProductionEconomy(ProductionOrder order, String factoryId, String product, long currentTick, int produced) {
+        if (economy != null) {
+            economy.recordProductionRevenue(order.id(), factoryId, product, currentTick, produced);
+        }
+    }
+
+    private void recordMaterialEconomy(String inventoryTransactionId, long currentTick, BigDecimal amount) {
+        if (economy != null) {
+            economy.recordMaterialCost(inventoryTransactionId, currentTick, amount);
+        }
+    }
+
+    private void recordShipmentEconomy(String shipmentId, long currentTick, int quantity, boolean delayed) {
+        if (economy != null) {
+            economy.recordShipmentRevenue(shipmentId, currentTick, quantity, delayed);
+        }
+    }
+
+    private void recordMaintenanceEconomy(String maintenanceEventId, long currentTick, BigDecimal amount) {
+        if (economy != null) {
+            economy.recordMaintenanceCost(maintenanceEventId, currentTick, amount);
+        }
+    }
+
+    private void recordQualityEconomy(String inspectionId, long currentTick, BigDecimal amount) {
+        if (economy != null) {
+            economy.recordQualityLoss(inspectionId, currentTick, amount);
         }
     }
 

@@ -133,7 +133,8 @@ public final class OutboxModels {
             String service,
             String status,
             Map<String, IntegrationState> integrations,
-            RoutingConfig routing
+            RoutingConfig routing,
+            String economySummaryPath
     ) {
     }
 
