@@ -638,15 +638,25 @@ public class NexusStateService {
         LogisticsShipment shipment = new LogisticsShipment(id("SHP"), factory.id(), "Central Warehouse", shipmentStatus, shipmentStatus.equals("DELAYED") ? 1 : 3);
         shipments.add(shipment);
         emitSyntheticEvent(shipmentStatus.equals("DELAYED") ? EventType.SHIPMENT_HOLD_CREATED : EventType.LOGISTICS_DISPATCHED,
-                "LogisticsShipment", shipment.id(), "tick:" + currentTick + ":shipment:" + shipment.id(), Map.of(
-                        "factoryId", factory.id(),
-                        "shipmentId", shipment.id(),
-                        "destination", shipment.destination(),
-                        "status", shipment.status(),
-                        "estimatedCost", shipmentStatus.equals("DELAYED") ? 1_200_000 : 450_000,
-                        "currency", "KRW",
-                        "synthetic", true,
-                        "requiresApproval", false
+                "LogisticsShipment", shipment.id(), "tick:" + currentTick + ":shipment:" + shipment.id(), Map.ofEntries(
+                        Map.entry("factoryId", factory.id()),
+                        Map.entry("shipmentId", shipment.id()),
+                        Map.entry("originCode", factory.id()),
+                        Map.entry("destinationCode", switch ((int) (currentTick % 3)) {
+                            case 0 -> "DC-SEOUL-01";
+                            case 1 -> "DC-DAEJEON-01";
+                            default -> "DC-BUSAN-01";
+                        }),
+                        Map.entry("priority", shipment.priority() <= 1 ? "HIGH" : "NORMAL"),
+                        Map.entry("itemType", line.product()),
+                        Map.entry("quantity", Math.max(1, produced)),
+                        Map.entry("requiresColdChain", factory.kind() == FactoryKind.BATTERY_MODULE),
+                        Map.entry("destination", shipment.destination()),
+                        Map.entry("status", shipment.status()),
+                        Map.entry("estimatedCost", shipmentStatus.equals("DELAYED") ? 1_200_000 : 450_000),
+                        Map.entry("currency", "KRW"),
+                        Map.entry("synthetic", true),
+                        Map.entry("requiresApproval", false)
                 ));
 
         if (vibration >= machine.vibrationThreshold() || temperature >= machine.temperatureThreshold() || current >= machine.currentThreshold()) {

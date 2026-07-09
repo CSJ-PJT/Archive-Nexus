@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 @Component
-public class LedgerPublisher {
+public class LogiticsPublisher {
     private final HttpClient client;
     private final ObjectMapper mapper;
     private final String baseUrl;
@@ -21,11 +21,11 @@ public class LedgerPublisher {
     private final boolean enabled;
     private final Duration timeout;
 
-    public LedgerPublisher(ObjectMapper mapper,
-                           @Value("${archive.integrations.ledger.base-url:${archive-nexus.ledger.base-url:http://localhost:18080}}") String baseUrl,
-                           @Value("${archive.integrations.ledger.bulk-endpoint:/api/events/nexus/bulk}") String bulkEndpoint,
-                           @Value("${archive.integrations.ledger.enabled:${archive-nexus.ledger.enabled:false}}") boolean enabled,
-                           @Value("${archive.integrations.ledger.timeout-ms:${archive-nexus.ledger.timeout-ms:3000}}") long timeoutMs) {
+    public LogiticsPublisher(ObjectMapper mapper,
+                             @Value("${archive.integrations.logitics.base-url:http://localhost:8092}") String baseUrl,
+                             @Value("${archive.integrations.logitics.bulk-endpoint:/api/events/nexus/bulk}") String bulkEndpoint,
+                             @Value("${archive.integrations.logitics.enabled:false}") boolean enabled,
+                             @Value("${archive.integrations.logitics.timeout-ms:3000}") long timeoutMs) {
         this.mapper = mapper;
         this.baseUrl = baseUrl == null ? "" : baseUrl.replaceAll("/+$", "");
         this.bulkEndpoint = normalizeEndpoint(bulkEndpoint);
@@ -48,10 +48,10 @@ public class LedgerPublisher {
 
     public void publish(List<OutboxEventEntity> events) {
         if (!enabled) {
-            throw new IllegalStateException("Archive-Ledger publishing is disabled.");
+            throw new IllegalStateException("Archive-Logitics publishing is disabled.");
         }
         try {
-            List<Map<String, Object>> body = events.stream().map(this::payload).toList();
+            Map<String, Object> body = Map.of("events", events.stream().map(this::payload).toList());
             HttpRequest request = HttpRequest.newBuilder(URI.create(targetUrl()))
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
@@ -60,13 +60,13 @@ public class LedgerPublisher {
                     .build();
             HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("Archive-Ledger returned HTTP " + response.statusCode() + ": " + response.body());
+                throw new IllegalStateException("Archive-Logitics returned HTTP " + response.statusCode() + ": " + response.body());
             }
         } catch (Exception error) {
             if (error instanceof RuntimeException runtime) {
                 throw runtime;
             }
-            throw new IllegalStateException("Archive-Ledger publish failed", error);
+            throw new IllegalStateException("Archive-Logitics publish failed", error);
         }
     }
 
@@ -74,7 +74,29 @@ public class LedgerPublisher {
         if (!enabled) {
             return "DISABLED";
         }
-        return get(baseUrl + "/actuator/health");
+        String actuator = get(baseUrl + "/actuator/health");
+        return "UNAVAILABLE".equals(actuator) ? get(baseUrl + "/api/operations/summary") : actuator;
+    }
+
+    private Map<String, Object> payload(OutboxEventEntity event) {
+        return Map.of(
+                "eventId", event.eventId(),
+                "idempotencyKey", event.idempotencyKey(),
+                "source", event.source(),
+                "eventType", event.eventType().name(),
+                "schemaVersion", event.schemaVersion(),
+                "occurredAt", event.occurredAt().toString(),
+                "payload", readPayload(event.payload())
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> readPayload(String payload) {
+        try {
+            return mapper.readValue(payload, Map.class);
+        } catch (Exception error) {
+            return Map.of("rawPayload", payload);
+        }
     }
 
     private String get(String url) {
@@ -88,29 +110,6 @@ public class LedgerPublisher {
             return response.statusCode() >= 200 && response.statusCode() < 300 ? "AVAILABLE" : "DEGRADED";
         } catch (Exception error) {
             return "UNAVAILABLE";
-        }
-    }
-
-    private Map<String, Object> payload(OutboxEventEntity event) {
-        return Map.of(
-                "eventId", event.eventId(),
-                "idempotencyKey", event.idempotencyKey(),
-                "eventType", event.eventType().name(),
-                "aggregateType", event.aggregateType(),
-                "aggregateId", event.aggregateId(),
-                "source", event.source(),
-                "schemaVersion", event.schemaVersion(),
-                "payload", readPayload(event.payload()),
-                "occurredAt", event.occurredAt().toString()
-        );
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> readPayload(String payload) {
-        try {
-            return mapper.readValue(payload, Map.class);
-        } catch (Exception error) {
-            return Map.of("rawPayload", payload);
         }
     }
 

@@ -2,6 +2,8 @@ package com.archivenexus.backend.outbox;
 
 import com.archivenexus.backend.outbox.OutboxModels.EventType;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxStatus;
+import com.archivenexus.backend.outbox.OutboxModels.OutboxTargetService;
+import com.archivenexus.backend.outbox.OutboxModels.RoutingStatus;
 import jakarta.persistence.*;
 
 import java.time.Instant;
@@ -14,7 +16,8 @@ import java.time.Instant;
         },
         indexes = {
                 @Index(name = "nexus_outbox_event_status_idx", columnList = "status, created_at"),
-                @Index(name = "nexus_outbox_event_type_idx", columnList = "event_type, occurred_at")
+                @Index(name = "nexus_outbox_event_type_idx", columnList = "event_type, occurred_at"),
+                @Index(name = "nexus_outbox_event_target_idx", columnList = "target_service, status, created_at")
         })
 public class OutboxEventEntity {
     @Id
@@ -56,6 +59,27 @@ public class OutboxEventEntity {
     @Column(name = "last_error", columnDefinition = "text")
     private String lastError;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "target_service", length = 50)
+    private OutboxTargetService targetService;
+
+    @Column(name = "target_url", length = 500)
+    private String targetUrl;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "routing_status", length = 50)
+    private RoutingStatus routingStatus;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "last_publish_target", length = 50)
+    private OutboxTargetService lastPublishTarget;
+
+    @Column(name = "last_publish_attempt_at")
+    private Instant lastPublishAttemptAt;
+
+    @Column(name = "publish_skipped_reason", columnDefinition = "text")
+    private String publishSkippedReason;
+
     @Column(name = "occurred_at", nullable = false)
     private Instant occurredAt;
 
@@ -84,12 +108,44 @@ public class OutboxEventEntity {
         this.status = OutboxStatus.PUBLISHED;
         this.publishedAt = now;
         this.lastError = null;
+        this.publishSkippedReason = null;
+        this.routingStatus = RoutingStatus.ROUTED;
     }
 
-    public void markFailure(String message) {
+    public void markFailure(String message, int maxRetryCount) {
         this.retryCount += 1;
         this.lastError = message;
-        this.status = retryCount >= 5 ? OutboxStatus.FAILED : OutboxStatus.PENDING_RETRY;
+        this.routingStatus = RoutingStatus.ROUTE_FAILED;
+        this.status = retryCount >= Math.max(1, maxRetryCount) ? OutboxStatus.FAILED : OutboxStatus.PENDING_RETRY;
+    }
+
+    public void markSkipped(String reason, RoutingStatus routingStatus, Instant now) {
+        this.status = OutboxStatus.SKIPPED;
+        this.publishSkippedReason = reason;
+        this.routingStatus = routingStatus;
+        this.lastPublishAttemptAt = now;
+        this.lastError = null;
+    }
+
+    public void recordDryRun(String reason, Instant now) {
+        this.publishSkippedReason = reason;
+        this.routingStatus = RoutingStatus.DRY_RUN;
+        this.lastPublishAttemptAt = now;
+        this.lastError = null;
+    }
+
+    public void route(OutboxTargetService targetService, String targetUrl, RoutingStatus routingStatus, String skippedReason) {
+        this.targetService = targetService;
+        this.targetUrl = targetUrl;
+        this.routingStatus = routingStatus;
+        this.publishSkippedReason = skippedReason;
+    }
+
+    public void recordPublishAttempt(OutboxTargetService target, String targetUrl, Instant now) {
+        this.lastPublishTarget = target;
+        this.targetService = target;
+        this.targetUrl = targetUrl;
+        this.lastPublishAttemptAt = now;
     }
 
     public Long id() { return id; }
@@ -104,6 +160,12 @@ public class OutboxEventEntity {
     public OutboxStatus status() { return status; }
     public int retryCount() { return retryCount; }
     public String lastError() { return lastError; }
+    public OutboxTargetService targetService() { return targetService; }
+    public String targetUrl() { return targetUrl; }
+    public RoutingStatus routingStatus() { return routingStatus; }
+    public OutboxTargetService lastPublishTarget() { return lastPublishTarget; }
+    public Instant lastPublishAttemptAt() { return lastPublishAttemptAt; }
+    public String publishSkippedReason() { return publishSkippedReason; }
     public Instant occurredAt() { return occurredAt; }
     public Instant createdAt() { return createdAt; }
     public Instant publishedAt() { return publishedAt; }

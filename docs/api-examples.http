@@ -1,0 +1,38 @@
+### Generate logistics events
+POST http://localhost:8080/api/outbox/events/generate?count=100&type=logistics
+
+### Generate ledger events
+POST http://localhost:8080/api/outbox/events/generate?count=100&type=ledger
+
+### Dry-run publish
+POST http://localhost:8080/api/outbox/events/publish?target=auto&dryRun=true
+
+### Publish only Archive-Logitics target events
+POST http://localhost:8080/api/outbox/events/publish?target=logitics
+
+### Publish only Archive-Ledger target events
+POST http://localhost:8080/api/outbox/events/publish?target=ledger
+
+### Outbox summary
+GET http://localhost:8080/api/outbox/summary
+
+### Integration summary
+GET http://localhost:8080/api/integrations/summary
+
+### Failed events
+GET http://localhost:8080/api/outbox/events?status=FAILED
+
+### Pending retry events
+GET http://localhost:8080/api/outbox/events?status=PENDING_RETRY
+
+### Logitics target events
+GET http://localhost:8080/api/outbox/events?targetService=LOGITICS
+
+### Ledger target events
+GET http://localhost:8080/api/outbox/events?targetService=LEDGER
+
+### PowerShell examples
+# curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=100&type=logistics"
+# curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=auto&dryRun=true"
+# curl.exe "http://localhost:8080/api/outbox/summary"
+# curl.exe "http://localhost:8080/api/integrations/summary"

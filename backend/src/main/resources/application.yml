@@ -32,8 +32,8 @@ archive-nexus:
     backend-atlas-url: ${BACKEND_ATLAS_URL:https://github.com/CSJ-PJT/Backend-Atlas}
   ledger:
     enabled: ${ARCHIVE_LEDGER_ENABLED:false}
-    base-url: ${ARCHIVE_LEDGER_BASE_URL:http://host.docker.internal:18080}
-    timeout-ms: ${ARCHIVE_LEDGER_TIMEOUT_MS:2000}
+    base-url: ${ARCHIVE_LEDGER_BASE_URL:http://localhost:18080}
+    timeout-ms: ${ARCHIVE_LEDGER_TIMEOUT_MS:3000}
     publish-interval-ms: ${ARCHIVE_LEDGER_PUBLISH_INTERVAL_MS:15000}
     publish-batch-size: ${ARCHIVE_LEDGER_PUBLISH_BATCH_SIZE:100}
   archiveos:
@@ -50,6 +50,25 @@ archive-nexus:
     tick-delay-ms: 5000
     persistence-enabled: true
     state-file: data/archive-nexus-state.json
+
+archive:
+  integrations:
+    logitics:
+      enabled: ${ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED:false}
+      base-url: ${ARCHIVE_INTEGRATIONS_LOGITICS_BASE_URL:http://localhost:8092}
+      bulk-endpoint: ${ARCHIVE_INTEGRATIONS_LOGITICS_BULK_ENDPOINT:/api/events/nexus/bulk}
+      timeout-ms: ${ARCHIVE_INTEGRATIONS_LOGITICS_TIMEOUT_MS:3000}
+    ledger:
+      enabled: ${ARCHIVE_INTEGRATIONS_LEDGER_ENABLED:${ARCHIVE_LEDGER_ENABLED:false}}
+      base-url: ${ARCHIVE_INTEGRATIONS_LEDGER_BASE_URL:${ARCHIVE_LEDGER_BASE_URL:http://localhost:18080}}
+      bulk-endpoint: ${ARCHIVE_INTEGRATIONS_LEDGER_BULK_ENDPOINT:/api/events/nexus/bulk}
+      timeout-ms: ${ARCHIVE_INTEGRATIONS_LEDGER_TIMEOUT_MS:${ARCHIVE_LEDGER_TIMEOUT_MS:3000}}
+    routing:
+      mode: ${ARCHIVE_INTEGRATIONS_ROUTING_MODE:AUTO}
+      allow-ledger-direct-fallback-for-logistics: ${ARCHIVE_INTEGRATIONS_ROUTING_ALLOW_LEDGER_DIRECT_FALLBACK_FOR_LOGISTICS:false}
+      chunk-size: ${ARCHIVE_INTEGRATIONS_ROUTING_CHUNK_SIZE:${ARCHIVE_LEDGER_PUBLISH_BATCH_SIZE:50}}
+      max-retry-count: ${ARCHIVE_INTEGRATIONS_ROUTING_MAX_RETRY_COUNT:5}
+      publish-interval-ms: ${ARCHIVE_INTEGRATIONS_ROUTING_PUBLISH_INTERVAL_MS:${ARCHIVE_LEDGER_PUBLISH_INTERVAL_MS:15000}}
 
 server:
   port: 8080
