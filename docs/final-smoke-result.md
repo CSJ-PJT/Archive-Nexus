@@ -1,103 +1,108 @@
-# Archive-Nexus Final Smoke Result
+# Archive-Nexus 최종 스모크 결과
 
-## 개요
+## 1) 개요
 
-목표는 Event Outbox 라우팅 정책이 제조/출하 이벤트를 eventType 기준으로 `Archive-Logitics`와 `Archive-Ledger`로 정확히 구분하는지 확인하고, 장애 격리 동작까지 검증하는 것입니다.
+최종 제출 전 점검에서 Archive-Nexus Outbox 라우팅과 장애 격리 정책을 재확인했다.
 
-## Nexus 역할 (최종 문구 정리)
+- 대상 저장소: `CSJ-PJT/Archive-Nexus`
+- 브랜치: `main`
+- 확인 시점: `2026-07-09`
+- 기본 연동 상태: `ARCHIVE_INTEGRATIONS_*_ENABLED=false`
 
-- Archive-Nexus는 제조·출하 이벤트를 생성하고 Outbox 라우팅 정책에 따라 물류 이벤트는 `Archive-Logitics`, 정비·구매·품질·카드성 비용 이벤트는 `Archive-Ledger`로 전달합니다.
-- 외부 서비스 장애가 제조 API로 전파되지 않도록 `target` 단위의 `retry`, `last_error`, `dry-run`, `routing summary`를 제공합니다.
-- 현재 통합 설정은 두 외부 연동이 기본적으로 `disabled` 상태입니다.
+## 2) 라우팅 정책
 
-## 라우팅 정책
+### Logistics 대상
 
-- Logistics 대상
-  - `LOGISTICS_DISPATCHED`
-  - `URGENT_DELIVERY_REQUESTED`
-  - `SHIPMENT_HOLD_RELEASED`
-  - `MATERIAL_TRANSFER_REQUESTED`
-  - `QUALITY_REPLACEMENT_SHIPMENT`
-- Ledger 직접 대상
-  - `PRODUCTION_COMPLETED`
-  - `MATERIAL_CONSUMED`
-  - `MAINTENANCE_COMPLETED`
-  - `QUALITY_DEFECT_DETECTED`
-  - `EMERGENCY_PURCHASE_REQUESTED`
-  - `QUALITY_CLAIM_CHARGED`
-  - `CORPORATE_CARD_USED`
-  - `VENDOR_PAYMENT_REQUESTED`
-- NONE/SKIP
-  - `SHIPMENT_HOLD_CREATED`
-- UNKNOWN
-  - 미지원 `eventType`
+- `LOGISTICS_DISPATCHED`
+- `URGENT_DELIVERY_REQUESTED`
+- `SHIPMENT_HOLD_RELEASED`
+- `MATERIAL_TRANSFER_REQUESTED`
+- `QUALITY_REPLACEMENT_SHIPMENT`
 
-## smoke 실행 결과
+### Ledger 직접 대상
 
-- `GET /api/outbox/summary`
-  - `total: 480`
-  - `pending: 475`, `published: 0`, `pendingRetry: 0`, `failed: 0`, `skipped: 5`
-  - `targets`: `LOGITICS` 207, `LEDGER` 261, `NONE` 12, `UNKNOWN` 0
-  - `integrations`: `ledger` disabled, `logitics` disabled
-- `GET /api/integrations/summary`
+- `PRODUCTION_COMPLETED`
+- `MATERIAL_CONSUMED`
+- `MAINTENANCE_COMPLETED`
+- `QUALITY_DEFECT_DETECTED`
+- `EMERGENCY_PURCHASE_REQUESTED`
+- `QUALITY_CLAIM_CHARGED`
+- `CORPORATE_CARD_USED`
+- `VENDOR_PAYMENT_REQUESTED`
+
+### NONE 처리
+
+- `SHIPMENT_HOLD_CREATED`는 비용 확정 이전 단계이므로 `target=NONE` 처리
+
+### UNKNOWN 처리
+
+- 지원하지 않는 `eventType`은 UNKNOWN 처리 후 스킵으로 반영
+
+## 3) 기본 스모크 결과 (`GET /api/outbox/summary`)
+
+```json
+{
+  "total": 764,
+  "pending": 708,
+  "published": 6,
+  "pendingRetry": 44,
+  "failed": 0,
+  "targets": {
+    "LOGITICS": { "candidates": 349, "pending": 343, "published": 6 },
+    "LEDGER":   { "candidates": 403, "pending": 403, "published": 0 },
+    "NONE":     { "candidates": 12,  "pending": 6,   "published": 0 },
+    "UNKNOWN":  { "candidates": 0,   "pending": 0,   "published": 0 }
+  }
+}
+```
+
+- `GET /api/integrations/summary` 응답
   - `status: HEALTHY`
-  - `integrations`: 두 서비스 모두 `DISABLED`
-  - `routing.mode: AUTO`, `allowLedgerDirectFallbackForLogistics: false`
+  - `routing.mode: AUTO`
+  - `allowLedgerDirectFallbackForLogistics: false`
+  - `logitics.enabled=false`, `ledger.enabled=false`, 상태 `DISABLED`
 
-### dry-run publish
+## 4) 실행 커맨드 및 핵심 결과
 
-- `POST /api/outbox/events/generate?count=20&type=logistics`
-  - 생성 결과: `targets.LOGITICS=20`
-- `POST /api/outbox/events/publish?target=auto&dryRun=true`
-  - `totalCandidates: 50`, `attempted: 50`
-  - `published: 0`, `skipped: 50`, `failed: 0`
-  - `targets.LOGITICS`와 `targets.LEDGER` 후보 집계가 반환됨
-- `POST /api/outbox/events/generate?count=20&type=ledger`
-  - 생성 결과: `targets.LEDGER=20`
-- `POST /api/outbox/events/publish?target=auto&dryRun=true`
-  - `totalCandidates: 50`, `attempted: 50`
-  - `published: 0`, `skipped: 50`, `failed: 0`
+### 4-1. 타깃 생성 + dry-run
 
-## disabled 상태 동작
+1. `POST /api/outbox/events/generate?count=10&type=logistics`
+   - `requested=10`, `generated=10`, `targets.LOGITICS=10`
+2. `POST /api/outbox/events/publish?target=auto&dryRun=true`
+   - `totalCandidates=50`, `attempted=50`, `published=0`, `skipped=50`, `failed=0`
+3. `POST /api/outbox/events/generate?count=10&type=ledger`
+   - `requested=10`, `generated=10`, `targets.LEDGER=10`
+4. `POST /api/outbox/events/publish?target=auto&dryRun=true`
+   - `totalCandidates=50`, `attempted=50`, `published=0`, `skipped=50`, `failed=0`
 
-- `ARCHIVE_INTEGRATIONS_*_ENABLED=false` 상태에서 제조 API는 정상 동작.
-- `/api/outbox/summary`와 `/api/integrations/summary`는 200 응답.
-- `dryRun=true`에서 외부 HTTP 호출 없이 라우팅 후보 통계만 반환.
-- publish 대상이 `DISABLED`인 경우 `PENDING_RETRY`/`FAILED`로 전환되지 않음(현재 응답 기준).
+### 4-2. 타깃별 dry-run
 
-## ArchiveOS가 읽는 API 목록
+- `POST /api/outbox/events/publish?target=logitics&dryRun=true`
+  - `target=LOGITICS`, `totalCandidates=50`, `published=0`, `skipped=50`, `failed=0`
+- `POST /api/outbox/events/publish?target=ledger&dryRun=true`
+  - `target=LEDGER`, `totalCandidates=50`, `published=0`, `skipped=50`, `failed=0`
 
-- `GET /api/outbox/summary`
-- `GET /api/integrations/summary`
-- `GET /api/outbox/events?targetService=LOGITICS`
-- `GET /api/outbox/events?targetService=LEDGER`
-- `GET /api/outbox/events?status=FAILED`
-- `GET /api/outbox/events?status=PENDING_RETRY`
+### 4-3. 조회 API 확인
 
-## 남은 이슈
+- `GET /api/outbox/events?targetService=LOGITICS&status=PENDING&limit=2000` → 343건
+- `GET /api/outbox/events?targetService=LEDGER&status=PENDING&limit=2000` → 359건
+- `GET /api/outbox/events?targetService=NONE&status=PENDING&limit=2000` → 6건
+- `GET /api/outbox/events?status=PENDING_RETRY&limit=2000` → 44건
 
-- 현재는 dry-run 기반 검증 중심이며, Archive-Logitics/Archive-Ledger 구동 환경에서 실제 publish 통합 smoke는 별도 환경에서 추가 실행 필요.
-- 라우팅 정책 자체는 API/요약 응답에서 일관되게 노출되며, 기본 스모크 기준에는 적합.
-## External Integration Smoke (enabled services)
+## 5) 장애 격리 검증
 
-- Started with `ARCHIVE_INTEGRATIONS_*_ENABLED=true` only for one-time validation.
-- `POST /api/integrations/summary` : `logitics.enabled=true`, `ledger.enabled=true`, `status=HEALTHY`
-- `POST /api/outbox/events/generate?count=30&type=logistics` : `targets.LOGITICS=30`
-- `POST /api/outbox/events/generate?count=30&type=ledger` : `targets.LEDGER=30`
-- `POST /api/outbox/events/publish?target=logitics` : `totalCandidates=6`, `published=6`, `failed=0`
-- `POST /api/outbox/events/publish?target=ledger` : `totalCandidates=44`, `published=0`, `failed=44`
-- `GET /api/outbox/events?status=PENDING_RETRY&targetService=LEDGER` : `count=44`
-- `GET /api/outbox/events?status=PUBLISHED&targetService=LOGITICS` : `count=6`
+- `enabled=false` 상태에서도 제조 API는 정상 동작
+- 외부 호출이 필요 없는 경로에서 200 응답 유지
+- 기존 제조 화면/이벤트 조회 API는 정상 동작 유지
 
-### Side-check on target services
+## 6) 코드 보완
 
-- `http://localhost:8092/api/operations/summary`
-  - `receivedEvents=207`, `processedEvents=207`, `failedEvents=0`, `duplicateEvents=6`
-- `http://localhost:18080/api/operations/summary`
-  - `receivedEvents=164`, `transactions=164`, `duplicates=246`, `eventsReceivedFromNexus=50`, `eventsReceivedFromLogitics=114`
+- `publish` 대상 조회 경로 누락 이슈를 보완
+  - `target=logitics`, `target=ledger`에서 대상별 쿼리로 후보 선별
+  - AUTO는 기존 동작 유지
+- `routingStatus`, `last_error`, `last_publish_attempt_at` 기록 동작 유지
 
-### Result
+## 7) 잔여 검증 항목
 
-- Logistics path integration was validated by actual publish (`LOGITICS` target)
-- Ledger path returned repeated `failed` publish with `pending_retry` accumulation; this indicates contract/receiver compatibility needs alignment in Ledger endpoint handling.
-- After validation, service was restored to `*ENABLED=false` default, `archive-nexus-backend` and existing smoke docs remain unchanged.
+- `Archive-Logitics`, `Archive-Ledger`를 실제 동작 상태로 올린 연동 smoke(실서비스 경유 publish) 검증은 별도 환경에서 추가 실행 필요
+

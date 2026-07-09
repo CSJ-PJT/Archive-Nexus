@@ -196,11 +196,7 @@ public class OutboxEventService {
     @Transactional
     public PublishResult publishPending(PublishTarget requestedTarget, boolean dryRun) {
         PublishTarget safeTarget = requestedTarget == null ? PublishTarget.AUTO : requestedTarget;
-        List<OutboxEventEntity> candidates = repository.findAllByStatusInOrderByCreatedAtAsc(
-                        List.of(OutboxStatus.PENDING, OutboxStatus.PENDING_RETRY), PageRequest.of(0, publishBatchSize))
-                .stream()
-                .filter(event -> router.matchesTarget(event, safeTarget))
-                .toList();
+        List<OutboxEventEntity> candidates = loadCandidatesByPublishTarget(safeTarget);
         if (candidates.isEmpty()) {
             return emptyResult(safeTarget, dryRun);
         }
@@ -256,6 +252,37 @@ public class OutboxEventService {
 
         return new PublishResult(UUID.randomUUID().toString(), safeTarget, dryRun, candidates.size(), candidates.size(),
                 published, skipped, failed, targetResults);
+    }
+
+    private List<OutboxEventEntity> loadCandidatesByPublishTarget(PublishTarget target) {
+        PageRequest page = PageRequest.of(0, publishBatchSize);
+        List<OutboxStatus> statuses = List.of(OutboxStatus.PENDING, OutboxStatus.PENDING_RETRY);
+        if (target == PublishTarget.AUTO) {
+            return repository.findAllByStatusInOrderByCreatedAtAsc(statuses, page)
+                    .stream()
+                    .filter(event -> router.matchesTarget(event, target))
+                    .toList();
+        }
+        if (target == PublishTarget.LOGITICS) {
+            return repository.findAllByStatusInAndTargetServiceOrderByCreatedAtAsc(statuses, OutboxTargetService.LOGITICS, page);
+        }
+        if (target == PublishTarget.LEDGER) {
+            List<OutboxEventEntity> ledger = repository.findAllByStatusInAndTargetServiceOrderByCreatedAtAsc(statuses, OutboxTargetService.LEDGER, page);
+            if (!router.allowLedgerDirectFallbackForLogistics()) {
+                return ledger;
+            }
+            List<OutboxEventEntity> logitics = repository.findAllByStatusInAndTargetServiceOrderByCreatedAtAsc(statuses, OutboxTargetService.LOGITICS, page);
+            return mergeByCreatedAtAsc(ledger, logitics);
+        }
+        return List.of();
+    }
+
+    private List<OutboxEventEntity> mergeByCreatedAtAsc(List<OutboxEventEntity>... eventGroups) {
+        return Arrays.stream(eventGroups)
+                .flatMap(List::stream)
+                .sorted(Comparator.comparing(OutboxEventEntity::createdAt))
+                .limit(publishBatchSize)
+                .toList();
     }
 
     public OutboxEventResponse response(OutboxEventEntity event) {
