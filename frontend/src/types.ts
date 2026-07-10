@@ -16,6 +16,22 @@ export type Factory = {
   lines: Array<{ id: string; name: string; product: string; machines: Array<{ id: string; name: string }> }>;
 };
 
+export type FactoryControlRequest = {
+  id?: string;
+  name?: string;
+  kind: 'AUTOMOTIVE_PARTS' | 'BATTERY_MODULE' | 'ELECTRONICS';
+  scenario?: string;
+  product?: string;
+  initialInventory: number;
+  safetyStock: number;
+};
+
+export type FactoryMutationResponse = {
+  action: string;
+  factory: Factory;
+  simulator: SimulatorStatus;
+};
+
 export type FactoryAlert = {
   id: string;
   factoryId: string;

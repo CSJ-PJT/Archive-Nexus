@@ -1,6 +1,6 @@
 import {
   Activity, AlertTriangle, Bot, Boxes, CheckCircle2, CircleStop, Clock3, Database,
-  Factory, Gauge, Play, RefreshCw, ShieldCheck, Truck, Wrench
+  Factory, Gauge, Globe2, Play, Plus, RefreshCw, ShieldCheck, Trash2, Truck, Wrench
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
@@ -9,12 +9,24 @@ import { ManufacturingAiPanel } from './ManufacturingAiPanel';
 import { TaskOperationsPanel } from './TaskOperationsPanel';
 import type {
   AiDashboardSummary, ArchiveOsInteraction, ArchiveOsStatus, BatchSnapshot, InventoryItem, InventoryTransaction,
-  LogisticsShipment, MaintenanceEvent, NexusTask, Overview, PlatformManifest, ProductionOrder,
+  FactoryControlRequest, LogisticsShipment, MaintenanceEvent, NexusTask, Overview, PlatformManifest, ProductionOrder,
   QualityInspection, RpaTask, SimulatorPersistenceStatus
 } from './types';
 
 const tabs = ['Overview', 'Tasks', 'Manufacturing AI', 'Factories', 'Production', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
 type Tab = (typeof tabs)[number];
+const languageOptions = [
+  { code: 'ko', label: '한국어' },
+  { code: 'en', label: 'English' },
+  { code: 'ja', label: '日本語' },
+  { code: 'zh', label: '中文' }
+] as const;
+type LanguageCode = (typeof languageOptions)[number]['code'];
+
+function readLanguage(): LanguageCode {
+  const saved = window.localStorage.getItem('archive-nexus-language');
+  return languageOptions.some((item) => item.code === saved) ? saved as LanguageCode : 'ko';
+}
 
 type OperationsData = {
   productionOrders: ProductionOrder[];
@@ -71,6 +83,7 @@ export function App() {
   const [persistence, setPersistence] = useState<SimulatorPersistenceStatus>(fallbackPersistence);
   const [aiSummary, setAiSummary] = useState<AiDashboardSummary>(fallbackAiSummary);
   const [platformManifest, setPlatformManifest] = useState<PlatformManifest>(fallbackManifest);
+  const [language, setLanguage] = useState<LanguageCode>(() => readLanguage());
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState('');
@@ -116,6 +129,12 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  useEffect(() => {
+    window.localStorage.setItem('archive-nexus-language', language);
+    document.documentElement.lang = language;
+    document.documentElement.dataset.language = language;
+  }, [language]);
+
   const runAction = async (action: () => Promise<unknown>) => {
     setActionPending(true);
     try {
@@ -141,6 +160,7 @@ export function App() {
       <header className="topbar">
         <div className="topbar-title"><img src="/archive-nexus-mark.svg" alt="" aria-hidden="true" /><div><h1>{tab}</h1><p>ArchiveOS 제조 운영 관제 · {lastUpdatedAt ? `최근 동기화 ${formatTime(lastUpdatedAt)}` : '연결 중'}</p></div><span className={`integration-state ${(archiveOsStatus?.status ?? 'CHECKING').toLowerCase()}`}>ArchiveOS {archiveOsStatus?.status ?? 'CHECKING'}</span></div>
         <div className="actions">
+          <LanguageSelector value={language} onChange={setLanguage} />
           <button className="icon-button secondary" onClick={() => void load()} title="데이터 새로고침" aria-label="데이터 새로고침"><RefreshCw size={17} /></button>
           <button onClick={() => void runAction(api.startSimulator)} disabled={actionPending || overview.simulator.running}><Play size={17} />Start</button>
           <button className="stop" onClick={() => void runAction(api.stopSimulator)} disabled={actionPending || !overview.simulator.running}><CircleStop size={17} />Stop</button>
@@ -159,7 +179,7 @@ export function App() {
         {tab === 'Overview' && <OverviewPanel overview={overview} operations={operations} aiSummary={aiSummary} />}
         {tab === 'Tasks' && <TaskOperationsPanel factories={overview.factories} tasks={operations.tasks} onChanged={load} />}
         {tab === 'Manufacturing AI' && <ManufacturingAiPanel factories={overview.factories} onChanged={load} />}
-        {tab === 'Factories' && <FactoriesPanel overview={overview} operations={operations} />}
+        {tab === 'Factories' && <FactoriesPanel overview={overview} operations={operations} runAction={runAction} />}
         {tab === 'Production' && <ProductionPanel orders={operations.productionOrders} />}
         {tab === 'Inventory' && <InventoryPanel items={operations.inventoryItems} transactions={operations.inventoryTransactions} />}
         {tab === 'Quality' && <QualityPanel inspections={operations.qualityInspections} />}
@@ -176,6 +196,10 @@ function Metric({ icon, label, value, tone = 'normal' }: { icon: ReactNode; labe
   return <div className={`metric ${tone}`}><span>{icon}</span><small>{label}</small><strong>{value}</strong></div>;
 }
 
+function LanguageSelector({ value, onChange }: { value: LanguageCode; onChange: (value: LanguageCode) => void }) {
+  return <label className="language-selector" title="Display language"><Globe2 size={15} aria-hidden="true" /><select aria-label="Display language" value={value} onChange={(event) => onChange(event.target.value as LanguageCode)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>;
+}
+
 function OverviewPanel({ overview, operations, aiSummary }: { overview: Overview; operations: OperationsData; aiSummary: AiDashboardSummary }) {
   const totalTarget = operations.productionOrders.reduce((sum, order) => sum + order.targetQuantity, 0);
   const totalProduced = operations.productionOrders.reduce((sum, order) => sum + order.producedQuantity, 0);
@@ -189,16 +213,37 @@ function OverviewPanel({ overview, operations, aiSummary }: { overview: Overview
   </div>;
 }
 
-function FactoriesPanel({ overview, operations }: { overview: Overview; operations: OperationsData }) {
-  return <div className="factory-list">{overview.factories.map((factory) => {
-    const alerts = overview.recentAlerts.filter((item) => item.factoryId === factory.id);
-    const orders = operations.productionOrders.filter((item) => item.factoryId === factory.id);
-    const produced = orders.reduce((sum, item) => sum + item.producedQuantity, 0);
-    const target = orders.reduce((sum, item) => sum + item.targetQuantity, 0);
-    return <article className="panel" key={factory.id}><div className="card-heading"><div><h2>{factory.name}</h2><span className="muted">{factory.id} · {factory.kind}</span></div><StatusBadge value={alerts.some((item) => item.severity === 'CRITICAL') ? 'CRITICAL' : alerts.length ? 'WARNING' : 'NORMAL'} /></div><p>{factory.scenario}</p><dl className="summary-list"><Summary label="생산 달성률" value={percent(produced, target)} /><Summary label="최근 경보" value={`${alerts.length}건`} /><Summary label="라인" value={`${factory.lines.length}개`} /><Summary label="주요 제품" value={factory.lines[0]?.product ?? '-'} /></dl></article>;
-  })}</div>;
+function FactoriesPanel({ overview, operations, runAction }: { overview: Overview; operations: OperationsData; runAction: (action: () => Promise<unknown>) => Promise<void> }) {
+  const [form, setForm] = useState<FactoryControlRequest>({ id: '', name: '', kind: 'AUTOMOTIVE_PARTS', product: '', scenario: '', initialInventory: 2000, safetyStock: 800 });
+  const update = <K extends keyof FactoryControlRequest>(key: K, value: FactoryControlRequest[K]) => setForm((current) => ({ ...current, [key]: value }));
+  const createFactory = () => runAction(() => api.addFactory(form));
+  const removeFactory = (factoryId: string) => runAction(() => api.removeFactory(factoryId));
+  return <div className="grid">
+    <section className="panel full">
+      <PanelTitle icon={<Factory />} title="Factory Control" count={overview.factories.length} />
+      <div className="factory-control-form">
+        <label>Factory ID<input value={form.id} placeholder="Auto or FAC-D" onChange={(event) => update('id', event.target.value)} /></label>
+        <label>Name<input value={form.name} placeholder="Factory D" onChange={(event) => update('name', event.target.value)} /></label>
+        <label>Kind<select value={form.kind} onChange={(event) => update('kind', event.target.value as FactoryControlRequest['kind'])}><option value="AUTOMOTIVE_PARTS">AUTOMOTIVE_PARTS</option><option value="BATTERY_MODULE">BATTERY_MODULE</option><option value="ELECTRONICS">ELECTRONICS</option></select></label>
+        <label>Product<input value={form.product} placeholder="Battery pack" onChange={(event) => update('product', event.target.value)} /></label>
+        <label>Initial inventory<input type="number" min="1" value={form.initialInventory} onChange={(event) => update('initialInventory', Number(event.target.value))} /></label>
+        <label>Safety stock<input type="number" min="1" value={form.safetyStock} onChange={(event) => update('safetyStock', Number(event.target.value))} /></label>
+        <label className="wide-field">Scenario<input value={form.scenario} placeholder="Synthetic flexible production line" onChange={(event) => update('scenario', event.target.value)} /></label>
+        <button onClick={() => void createFactory()}><Plus size={15} />Add factory</button>
+      </div>
+    </section>
+    <section className="panel full">
+      <PanelTitle icon={<Factory />} title="Active Factories" count={overview.factories.length} />
+      <div className="factory-list">{overview.factories.map((factory) => {
+        const alerts = overview.recentAlerts.filter((item) => item.factoryId === factory.id);
+        const orders = operations.productionOrders.filter((item) => item.factoryId === factory.id);
+        const produced = orders.reduce((sum, item) => sum + item.producedQuantity, 0);
+        const target = orders.reduce((sum, item) => sum + item.targetQuantity, 0);
+        return <article className="panel" key={factory.id}><div className="card-heading"><div><h2>{factory.name}</h2><span className="muted">{factory.id} / {factory.kind}</span></div><StatusBadge value={alerts.some((item) => item.severity === 'CRITICAL') ? 'CRITICAL' : alerts.length ? 'WARNING' : 'NORMAL'} /></div><p>{factory.scenario}</p><dl className="summary-list"><Summary label="Production" value={percent(produced, target)} /><Summary label="Alerts" value={`${alerts.length}`} /><Summary label="Lines" value={`${factory.lines.length}`} /><Summary label="Product" value={factory.lines[0]?.product ?? '-'} /></dl><div className="inline-actions factory-card-actions"><button className="reject" disabled={overview.factories.length <= 1} onClick={() => void removeFactory(factory.id)}><Trash2 size={15} />Remove</button></div></article>;
+      })}</div>
+    </section>
+  </div>;
 }
-
 function ProductionPanel({ orders }: { orders: ProductionOrder[] }) {
   return <DataPanel icon={<Gauge />} title="생산 오더" count={orders.length}><Table headers={['오더', '공장', '제품', '목표', '실적', '달성률', '상태']} rows={orders.slice().reverse().map((order) => [order.id, order.factoryId, order.product, order.targetQuantity, order.producedQuantity, percent(order.producedQuantity, order.targetQuantity), <StatusBadge value={order.status} />])} /></DataPanel>;
 }

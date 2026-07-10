@@ -1,7 +1,7 @@
 import type {
   AiDashboardSummary, AiQueryRequest, AiQueryResponse, ArchiveOsInteraction, ArchiveOsStatus, BatchSnapshot, Factory, FactoryAlert, InventoryItem,
   InventoryTransaction, LogisticsShipment, MaintenanceEvent, Overview,
-  CreateNexusTask, NexusTask, NexusTaskLog, ProductionOrder, QualityInspection, RpaTask, SimulatorPersistenceStatus,
+  CreateNexusTask, FactoryControlRequest, FactoryMutationResponse, NexusTask, NexusTaskLog, ProductionOrder, QualityInspection, RpaTask, SimulatorPersistenceStatus,
   SimulatorStatus, PlatformManifest
 } from './types';
 
@@ -29,6 +29,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   overview: () => request<Overview>('/api/overview?pendingLimit=50'),
   factories: () => request<Factory[]>('/api/factories'),
+  addFactory: (body: FactoryControlRequest) => request<FactoryMutationResponse>('/api/factories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+  removeFactory: (id: string) => request<FactoryMutationResponse>(`/api/factories/${id}`, { method: 'DELETE' }),
   alerts: (factoryId: string) => request<FactoryAlert[]>(`/api/factories/${factoryId}/alerts`),
   rpaTasks: () => request<RpaTask[]>('/api/rpa/tasks?limit=100'),
   tasks: () => request<NexusTask[]>('/api/tasks'),

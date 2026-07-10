@@ -2,6 +2,8 @@ package com.archivenexus.backend.web;
 
 import com.archivenexus.backend.domain.DomainModels.Factory;
 import com.archivenexus.backend.domain.DomainModels.FactoryAlert;
+import com.archivenexus.backend.domain.DomainModels.FactoryControlRequest;
+import com.archivenexus.backend.domain.DomainModels.FactoryMutationResponse;
 import com.archivenexus.backend.domain.DomainModels.ArchiveOsInteraction;
 import com.archivenexus.backend.domain.DomainModels.BatchSnapshot;
 import com.archivenexus.backend.domain.DomainModels.InventoryItem;
@@ -21,8 +23,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -55,6 +59,24 @@ public class NexusController {
     @GetMapping("/factories/{factoryId}")
     ResponseEntity<Factory> factory(@PathVariable String factoryId) {
         return ResponseEntity.of(nexus.factory(factoryId));
+    }
+
+    @PostMapping("/factories")
+    ResponseEntity<?> addFactory(@RequestBody(required = false) FactoryControlRequest request) {
+        try {
+            return ResponseEntity.ok(nexus.addFactory(request));
+        } catch (IllegalArgumentException cause) {
+            return ResponseEntity.badRequest().body(cause.getMessage());
+        }
+    }
+
+    @DeleteMapping("/factories/{factoryId}")
+    ResponseEntity<?> removeFactory(@PathVariable String factoryId) {
+        try {
+            return ResponseEntity.of(nexus.removeFactory(factoryId));
+        } catch (IllegalStateException cause) {
+            return ResponseEntity.badRequest().body(cause.getMessage());
+        }
     }
 
     @GetMapping("/factories/{factoryId}/lines")

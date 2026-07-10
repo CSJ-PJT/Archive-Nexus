@@ -7,7 +7,9 @@ import com.archivenexus.backend.domain.DomainModels.ArchiveOsInteraction;
 import com.archivenexus.backend.domain.DomainModels.BatchSnapshot;
 import com.archivenexus.backend.domain.DomainModels.Factory;
 import com.archivenexus.backend.domain.DomainModels.FactoryAlert;
+import com.archivenexus.backend.domain.DomainModels.FactoryControlRequest;
 import com.archivenexus.backend.domain.DomainModels.FactoryKind;
+import com.archivenexus.backend.domain.DomainModels.FactoryMutationResponse;
 import com.archivenexus.backend.domain.DomainModels.InventoryItem;
 import com.archivenexus.backend.domain.DomainModels.InventoryTransaction;
 import com.archivenexus.backend.domain.DomainModels.LogisticsShipment;
@@ -81,7 +83,7 @@ public class NexusStateService {
     private final AtomicLong fileRestoreCount = new AtomicLong();
     private final AtomicLong seedRestoreCount = new AtomicLong();
 
-    private final List<Factory> factories = new ArrayList<>();
+    private final List<Factory> factories = new CopyOnWriteArrayList<>();
     private final List<SensorMetric> sensorMetrics = new CopyOnWriteArrayList<>();
     private final List<ProductionOrder> productionOrders = new CopyOnWriteArrayList<>();
     private final List<Lot> lots = new CopyOnWriteArrayList<>();
@@ -236,6 +238,59 @@ public class NexusStateService {
 
     public Optional<Factory> factory(String id) {
         return factories.stream().filter(factory -> factory.id().equals(id)).findFirst();
+    }
+
+    public synchronized FactoryMutationResponse addFactory(FactoryControlRequest request) {
+        FactoryKind kind = request == null || request.kind() == null ? FactoryKind.AUTOMOTIVE_PARTS : request.kind();
+        String factoryId = normalizeFactoryId(request == null ? null : request.id());
+        if (factoryId == null) {
+            factoryId = nextFactoryId();
+        }
+        if (factory(factoryId).isPresent()) {
+            throw new IllegalArgumentException("Factory already exists: " + factoryId);
+        }
+        String name = valueOrDefault(request == null ? null : request.name(), "Factory " + factoryId.replace("FAC-", ""));
+        String product = valueOrDefault(request == null ? null : request.product(), defaultProduct(kind));
+        String scenario = valueOrDefault(request == null ? null : request.scenario(), defaultScenario(kind));
+        String suffix = factoryId.replace("FAC-", "").replaceAll("[^A-Z0-9]", "");
+        if (suffix.isBlank()) {
+            suffix = String.valueOf(factories.size() + 1);
+        }
+        ProductionLine line = new ProductionLine("LINE-" + suffix + "1", name + " main line", product,
+                List.of(new Machine("M-" + suffix + "1", name + " core machine", vibrationThreshold(kind), temperatureThreshold(kind), currentThreshold(kind))));
+        Factory factory = new Factory(factoryId, name, kind, scenario, List.of(line));
+        factories.add(factory);
+        inventoryItems.add(new InventoryItem(factoryId + "-RAW", product + " raw material", "RAW",
+                positiveOrDefault(request == null ? 0 : request.initialInventory(), 2000),
+                positiveOrDefault(request == null ? 0 : request.safetyStock(), 800)));
+        archiveOsClient.recordInteraction("FACTORY_ADDED", factoryId, name + ":" + kind);
+        persistState();
+        return new FactoryMutationResponse("ADDED", factory, status());
+    }
+
+    public synchronized Optional<FactoryMutationResponse> removeFactory(String factoryId) {
+        Optional<Factory> current = factory(factoryId);
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        if (factories.size() <= 1) {
+            throw new IllegalStateException("At least one factory must remain active");
+        }
+        Factory factory = current.get();
+        factories.remove(factory);
+        sensorMetrics.removeIf(item -> factoryId.equals(item.factoryId()));
+        productionOrders.removeIf(item -> factoryId.equals(item.factoryId()));
+        lots.removeIf(item -> factoryId.equals(item.factoryId()));
+        inspections.removeIf(item -> factoryId.equals(item.factoryId()));
+        inventoryItems.removeIf(item -> item.id().startsWith(factoryId));
+        inventoryTransactions.removeIf(item -> factoryId.equals(item.factoryId()) || item.itemId().startsWith(factoryId));
+        shipments.removeIf(item -> factoryId.equals(item.factoryId()));
+        maintenanceEvents.removeIf(item -> factoryId.equals(item.factoryId()));
+        alerts.removeIf(item -> factoryId.equals(item.factoryId()));
+        rpaTasks.removeIf(item -> factoryId.equals(item.factoryId()));
+        archiveOsClient.recordInteraction("FACTORY_REMOVED", factoryId, factory.name());
+        persistState();
+        return Optional.of(new FactoryMutationResponse("REMOVED", factory, status()));
     }
 
     public List<ProductionLine> lines(String factoryId) {
@@ -780,6 +835,76 @@ public class NexusStateService {
         inventoryItems.add(new InventoryItem("FAC-A-RAW", "자동차 부품 원자재", "RAW", 2600, 900));
         inventoryItems.add(new InventoryItem("FAC-B-RAW", "배터리 셀 원자재", "RAW", 1800, 850));
         inventoryItems.add(new InventoryItem("FAC-C-RAW", "전장 부품 원자재", "RAW", 2100, 820));
+    }
+
+    private String normalizeFactoryId(String requestedId) {
+        if (requestedId == null || requestedId.isBlank()) {
+            return null;
+        }
+        String value = requestedId.trim().toUpperCase().replaceAll("[^A-Z0-9-]", "-");
+        return value.startsWith("FAC-") ? value : "FAC-" + value;
+    }
+
+    private String nextFactoryId() {
+        for (char suffix = 'A'; suffix <= 'Z'; suffix++) {
+            String candidate = "FAC-" + suffix;
+            if (factory(candidate).isEmpty()) {
+                return candidate;
+            }
+        }
+        int index = factories.size() + 1;
+        while (factory("FAC-" + index).isPresent()) {
+            index++;
+        }
+        return "FAC-" + index;
+    }
+
+    private String defaultProduct(FactoryKind kind) {
+        return switch (kind) {
+            case AUTOMOTIVE_PARTS -> "Automotive bracket";
+            case BATTERY_MODULE -> "Battery module";
+            case ELECTRONICS -> "Control board";
+        };
+    }
+
+    private String defaultScenario(FactoryKind kind) {
+        return switch (kind) {
+            case AUTOMOTIVE_PARTS -> "Synthetic automotive parts production";
+            case BATTERY_MODULE -> "Synthetic battery module production";
+            case ELECTRONICS -> "Synthetic electronics quality tracking";
+        };
+    }
+
+    private double vibrationThreshold(FactoryKind kind) {
+        return switch (kind) {
+            case AUTOMOTIVE_PARTS -> 0.72;
+            case BATTERY_MODULE -> 0.7;
+            case ELECTRONICS -> 0.74;
+        };
+    }
+
+    private double temperatureThreshold(FactoryKind kind) {
+        return switch (kind) {
+            case AUTOMOTIVE_PARTS -> 86;
+            case BATTERY_MODULE -> 85;
+            case ELECTRONICS -> 84;
+        };
+    }
+
+    private double currentThreshold(FactoryKind kind) {
+        return switch (kind) {
+            case AUTOMOTIVE_PARTS -> 15;
+            case BATTERY_MODULE -> 14.5;
+            case ELECTRONICS -> 14;
+        };
+    }
+
+    private int positiveOrDefault(int value, int fallback) {
+        return value > 0 ? value : fallback;
+    }
+
+    private String valueOrDefault(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
     }
 
     private double anomalySpike(double max) {

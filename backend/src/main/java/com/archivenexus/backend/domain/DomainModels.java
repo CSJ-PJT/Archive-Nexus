@@ -35,6 +35,12 @@ public final class DomainModels {
     public record Factory(String id, String name, FactoryKind kind, String scenario, List<ProductionLine> lines) {
     }
 
+    public record FactoryControlRequest(String id, String name, FactoryKind kind, String scenario, String product, int initialInventory, int safetyStock) {
+    }
+
+    public record FactoryMutationResponse(String action, Factory factory, SimulatorStatus simulator) {
+    }
+
     public record ProductionLine(String id, String name, String product, List<Machine> machines) {
     }
 
