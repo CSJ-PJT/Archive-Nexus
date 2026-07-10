@@ -29,19 +29,25 @@ public class WorkforceService {
     private final ObjectMapper mapper;
     private final boolean enabled;
     private final int baselineCapacity;
+    private final int summaryDemandMultiplier;
+    private final int maxSummaryDemandPerRole;
 
     public WorkforceService(WorkforceAllocationRepository allocations,
                             WorkdayResultRepository workdayResults,
                             NexusStateService nexus,
                             ObjectMapper mapper,
                             @Value("${archive.workforce.enabled:false}") boolean enabled,
-                            @Value("${archive.workforce.baseline-capacity:120}") int baselineCapacity) {
+                            @Value("${archive.workforce.baseline-capacity:120}") int baselineCapacity,
+                            @Value("${archive.workforce.summary-demand-multiplier:2}") int summaryDemandMultiplier,
+                            @Value("${archive.workforce.max-summary-demand-per-role:1000}") int maxSummaryDemandPerRole) {
         this.allocations = allocations;
         this.workdayResults = workdayResults;
         this.nexus = nexus;
         this.mapper = mapper;
         this.enabled = enabled;
         this.baselineCapacity = Math.max(1, baselineCapacity);
+        this.summaryDemandMultiplier = Math.max(1, summaryDemandMultiplier);
+        this.maxSummaryDemandPerRole = Math.max(1, maxSummaryDemandPerRole);
     }
 
     @Transactional
@@ -153,7 +159,7 @@ public class WorkforceService {
                 capacity.totalCapacity(),
                 capacity.usedCapacity(),
                 Math.max(0, capacity.totalCapacity() - capacity.usedCapacity()),
-                capacity.demandUnits(),
+                capacity.backlogUnits(),
                 capacity.bottleneckRole(),
                 productivity.lastProductivityRate(),
                 allocations.count(),
@@ -176,7 +182,7 @@ public class WorkforceService {
                 snapshot.demandUnits(),
                 snapshot.usedCapacity(),
                 Math.max(0, snapshot.totalCapacity() - snapshot.usedCapacity()),
-                Math.max(0, snapshot.demandUnits() - snapshot.totalCapacity()),
+                snapshot.backlogUnits(),
                 snapshot.bottleneckRole(),
                 Instant.now()
         );
@@ -185,8 +191,9 @@ public class WorkforceService {
     public ProductivitySummary productivitySummary() {
         List<WorkdayResultEntity> recent = workdayResults.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 50));
         if (recent.isEmpty()) {
-            return new ProductivitySummary(enabled, 0, demandUnits(), demandUnits(), BigDecimal.ZERO,
-                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, bottleneckRole(), 0, Instant.now());
+            CapacitySnapshot snapshot = capacitySnapshot();
+            return new ProductivitySummary(enabled, 0, snapshot.demandUnits(), snapshot.backlogUnits(), BigDecimal.ZERO,
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, snapshot.bottleneckRole(), 0, Instant.now());
         }
         WorkdayResultEntity last = recent.getFirst();
         BigDecimal average = recent.stream()
@@ -208,12 +215,12 @@ public class WorkforceService {
         }
 
         CapacitySnapshot capacity = capacitySnapshot();
-        int productionRequested = nexus.productionOrders().size();
+        int productionRequested = capacity.productionDemand();
         int productionCompleted = Math.min(productionRequested, capacity.productionCapacity());
         int productionBacklog = Math.max(0, productionRequested - productionCompleted);
-        int qualityChecked = Math.min(nexus.inspections().size(), capacity.qualityCapacity());
-        int qualityDefects = Math.max(0, nexus.inspections().size() - capacity.qualityCapacity());
-        int maintenanceCompleted = Math.min(nexus.maintenanceEvents().size(), capacity.maintenanceCapacity());
+        int qualityChecked = Math.min(capacity.qualityDemand(), capacity.qualityCapacity());
+        int qualityDefects = Math.max(0, capacity.qualityDemand() - capacity.qualityCapacity());
+        int maintenanceCompleted = Math.min(capacity.maintenanceDemand(), capacity.maintenanceCapacity());
         int used = productionCompleted + qualityChecked + maintenanceCompleted;
         int total = capacity.totalCapacity();
         BigDecimal productivity = productionRequested == 0 ? BigDecimal.ONE
@@ -223,8 +230,13 @@ public class WorkforceService {
         evidence.put("enabled", enabled);
         evidence.put("baselineCapacity", baselineCapacity);
         evidence.put("productionRequested", productionRequested);
-        evidence.put("qualityDemand", nexus.inspections().size());
-        evidence.put("maintenanceDemand", nexus.maintenanceEvents().size());
+        evidence.put("qualityDemand", capacity.qualityDemand());
+        evidence.put("maintenanceDemand", capacity.maintenanceDemand());
+        evidence.put("rawProductionDemand", nexus.productionOrders().size());
+        evidence.put("rawQualityDemand", nexus.inspections().size());
+        evidence.put("rawMaintenanceDemand", nexus.maintenanceEvents().size());
+        evidence.put("summaryDemandMultiplier", summaryDemandMultiplier);
+        evidence.put("maxSummaryDemandPerRole", maxSummaryDemandPerRole);
         evidence.put("bottleneckRole", capacity.bottleneckRole());
 
         WorkdayResultEntity saved = workdayResults.save(new WorkdayResultEntity(
@@ -335,7 +347,17 @@ public class WorkforceService {
         int management = enabled ? roleCapacity(WorkforceRole.FACTORY_MANAGER) : Math.max(1, baselineCapacity / 10);
         int used = activeAllocations().stream().mapToInt(WorkforceAllocationEntity::usedCapacity).sum();
         int total = production + quality + maintenance + material + management;
-        return new CapacitySnapshot(production, quality, maintenance, material, management, total, used, demandUnits(), bottleneckRole());
+        int productionDemand = boundedOperationalDemand(nexus.productionOrders().size(), production, baselineCapacity);
+        int qualityDemand = boundedOperationalDemand(nexus.inspections().size(), quality, Math.max(1, baselineCapacity / 3));
+        int maintenanceDemand = boundedOperationalDemand(nexus.maintenanceEvents().size(), maintenance, Math.max(1, baselineCapacity / 4));
+        int demand = productionDemand + qualityDemand + maintenanceDemand;
+        int productionGap = Math.max(0, productionDemand - production);
+        int qualityGap = Math.max(0, qualityDemand - quality);
+        int maintenanceGap = Math.max(0, maintenanceDemand - maintenance);
+        int backlog = productionGap + qualityGap + maintenanceGap;
+        String bottleneck = bottleneckRole(productionGap, qualityGap, maintenanceGap);
+        return new CapacitySnapshot(production, quality, maintenance, material, management, total, used,
+                productionDemand, qualityDemand, maintenanceDemand, demand, backlog, bottleneck);
     }
 
     private int roleCapacity(WorkforceRole role) {
@@ -372,14 +394,17 @@ public class WorkforceService {
                 .intValue();
     }
 
-    private int demandUnits() {
-        return nexus.productionOrders().size() + nexus.inspections().size() + nexus.maintenanceEvents().size();
+    private int boundedOperationalDemand(int rawDemand, int roleCapacity, int fallbackCapacity) {
+        int capacityBasis = Math.max(1, roleCapacity > 0 ? roleCapacity : fallbackCapacity);
+        int window = Math.min(maxSummaryDemandPerRole, capacityBasis * summaryDemandMultiplier);
+        return Math.min(Math.max(0, rawDemand), window);
     }
 
     private String bottleneckRole() {
-        int productionGap = nexus.productionOrders().size() - (enabled ? roleCapacity(WorkforceRole.PRODUCTION_OPERATOR) : baselineCapacity);
-        int qualityGap = nexus.inspections().size() - (enabled ? roleCapacity(WorkforceRole.QUALITY_INSPECTOR) : baselineCapacity / 3);
-        int maintenanceGap = nexus.maintenanceEvents().size() - (enabled ? roleCapacity(WorkforceRole.MAINTENANCE_ENGINEER) : baselineCapacity / 4);
+        return capacitySnapshot().bottleneckRole();
+    }
+
+    private String bottleneckRole(int productionGap, int qualityGap, int maintenanceGap) {
         if (productionGap >= qualityGap && productionGap >= maintenanceGap && productionGap > 0) {
             return WorkforceRole.PRODUCTION_OPERATOR.name();
         }
@@ -472,7 +497,11 @@ public class WorkforceService {
             int managementCapacity,
             int totalCapacity,
             int usedCapacity,
+            int productionDemand,
+            int qualityDemand,
+            int maintenanceDemand,
             int demandUnits,
+            int backlogUnits,
             String bottleneckRole
     ) {
     }

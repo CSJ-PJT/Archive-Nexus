@@ -84,6 +84,8 @@ ArchiveOS 또는 Archive-Market이 합성 운영 인력을 배정하면 Nexus는
 
 `archive.workforce.enabled=false`이면 기존 기준 처리 능력으로 동작합니다. 활성 상태에서는 active allocation의 `effectiveCapacity`, `usedCapacity`, `remainingCapacity`를 실제로 소모합니다.
 
+ArchiveOS Live Flow에 노출되는 workforce backlog와 bottleneck은 전체 누적 제조 이력 수가 아니라 현재 운영 윈도우 기준 projection입니다. 누적 synthetic runtime data는 보존하되, `/api/workforce/summary`, `/api/capacity/summary`, `/api/operations/summary`의 관제 값은 role별 capacity와 summary demand window를 기준으로 산정합니다.
+
 ### 4. Outbox 라우팅
 
 | 대상 | 이벤트 타입 | 설명 |

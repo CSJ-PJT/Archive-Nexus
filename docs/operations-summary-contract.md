@@ -74,6 +74,15 @@ ArchiveOS 장애 여부는 Nexus 운영 상태를 바꾸지 않는다. ArchiveOS
 | `latestEventAt` | 최신 runtime event projection 시각 |
 | `liveFlowAvailable` | Runtime event API 사용 가능 여부 |
 
+`productionBacklog`와 `workforce.backlog`는 ArchiveOS Live Flow용 현재 운영 projection이다. Nexus에 누적된 전체 production/inspection/maintenance 이력 row 수를 그대로 backlog로 사용하지 않는다. workday snapshot이 아직 없으면 role별 bounded synthetic demand와 capacity gap으로 계산한다.
+
+운영 윈도우 기본값:
+
+- `archive.workforce.summary-demand-multiplier=2`
+- `archive.workforce.max-summary-demand-per-role=1000`
+
+원시 누적 수요는 workday run evidence의 `rawProductionDemand`, `rawQualityDemand`, `rawMaintenanceDemand`에서 추적할 수 있다.
+
 ## economy 필드
 
 현재 Nexus는 실제 매출/결제 데이터를 보유하지 않는다. `economy`는 synthetic workforce cost 기준의 운영 비용만 노출한다.

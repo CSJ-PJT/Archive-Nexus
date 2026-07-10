@@ -22,8 +22,8 @@ GET /api/operations/summary
 | `estimatedDailyCapacity` | 일일 예상 처리 능력 |
 | `usedCapacity` | 이미 소모한 capacity |
 | `remainingCapacity` | 남은 capacity |
-| `backlog` | 생산 수요 대비 미처리 물량 |
-| `bottleneckRole` | 병목 role |
+| `backlog` | 현재 운영 윈도우 기준 미처리 물량 |
+| `bottleneckRole` | 현재 운영 윈도우 기준 병목 role |
 | `productivityRate` | 최신 생산성 |
 
 ## Capacity 반영 규칙
@@ -33,6 +33,16 @@ GET /api/operations/summary
 - 요청량이 available capacity를 초과하면 초과분은 backlog로 계산되고 `BACKLOG_INCREASED` Outbox 이벤트가 생성된다.
 - workday 집계에서 backlog가 있으면 Live Flow projection으로 `CAPACITY_SHORTAGE_DETECTED`가 노출된다.
 - `QUALITY_INSPECTOR`, `MAINTENANCE_ENGINEER`, `MATERIAL_HANDLER` capacity는 quality/maintenance/material bottleneck 분석에 사용한다.
+
+## Runtime summary demand window
+
+`/api/workforce/summary`, `/api/productivity/summary`, `/api/capacity/summary`, `/api/operations/summary`는 ArchiveOS Live Flow가 현재 운영 상태를 읽기 위한 값이다. 따라서 backlog와 bottleneck은 전체 누적 제조 이력 row 수가 아니라 현재 workday에서 처리 가능한 bounded synthetic demand 기준으로 계산한다.
+
+- 원본 누적 production/inspection/maintenance 개수는 workday evidence에 `rawProductionDemand`, `rawQualityDemand`, `rawMaintenanceDemand`로 남긴다.
+- summary 계산은 role별 capacity와 `archive.workforce.summary-demand-multiplier`를 사용해 현재 운영 윈도우를 만든다.
+- role별 summary demand는 `archive.workforce.max-summary-demand-per-role`을 넘지 않는다.
+- 기본값은 `summary-demand-multiplier=2`, `max-summary-demand-per-role=1000`이다.
+- 이 보정은 누적 synthetic runtime data를 삭제하지 않는다. ArchiveOS 화면의 병목/미처리 물량이 전체 이력 누계 때문에 과대 표시되지 않도록 현재 운영 관제용 projection만 bounded 처리한다.
 
 ## Operations summary 추가 필드
 
