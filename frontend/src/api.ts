@@ -1,3 +1,4 @@
+import { translateDirect } from './i18n';
 import type {
   AiDashboardSummary, AiQueryRequest, AiQueryResponse, ArchiveOsInteraction, ArchiveOsStatus, BatchSnapshot, Factory, FactoryAlert, InventoryItem,
   InventoryTransaction, LogisticsShipment, MaintenanceEvent, Overview,
@@ -12,14 +13,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const timeout = window.setTimeout(() => controller.abort(), 10000);
   try {
     const response = await fetch(`${API_BASE}${path}`, { ...init, signal: controller.signal });
-    if (!response.ok) {
-      throw new Error(`API 요청 실패: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(translateDirect('error.apiRequestFailed', { status: response.status }));
     return response.json() as Promise<T>;
   } catch (cause) {
-    if (cause instanceof DOMException && cause.name === 'AbortError') {
-      throw new Error('API 응답 시간이 초과되었습니다. Backend 연결 상태를 확인하세요.');
-    }
+    if (cause instanceof DOMException && cause.name === 'AbortError') throw new Error(translateDirect('error.apiTimeout'));
     throw cause;
   } finally {
     window.clearTimeout(timeout);
@@ -63,3 +60,4 @@ export const api = {
   aiQueryDetail: (id: string) => request<AiQueryResponse>(`/api/ai/queries/${id}`),
   aiSummary: () => request<AiDashboardSummary>('/api/ai/summary')
 };
+

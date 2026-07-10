@@ -5,6 +5,8 @@ import {
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
+import { languageOptions, useI18n } from './i18n';
+import type { Locale } from './i18n/types';
 import { ManufacturingAiPanel } from './ManufacturingAiPanel';
 import { TaskOperationsPanel } from './TaskOperationsPanel';
 import type {
@@ -15,18 +17,20 @@ import type {
 
 const tabs = ['Overview', 'Tasks', 'Manufacturing AI', 'Factories', 'Production', 'Inventory', 'Quality', 'Maintenance', 'Logistics', 'RPA', 'Settings'] as const;
 type Tab = (typeof tabs)[number];
-const languageOptions = [
-  { code: 'ko', label: '한국어' },
-  { code: 'en', label: 'English' },
-  { code: 'ja', label: '日本語' },
-  { code: 'zh', label: '中文' }
-] as const;
-type LanguageCode = (typeof languageOptions)[number]['code'];
 
-function readLanguage(): LanguageCode {
-  const saved = window.localStorage.getItem('archive-nexus-language');
-  return languageOptions.some((item) => item.code === saved) ? saved as LanguageCode : 'ko';
-}
+const tabLabels: Record<Tab, string> = {
+  Overview: 'nav.overview',
+  Tasks: 'nav.tasks',
+  'Manufacturing AI': 'nav.manufacturingAi',
+  Factories: 'nav.factories',
+  Production: 'nav.production',
+  Inventory: 'nav.inventory',
+  Quality: 'nav.quality',
+  Maintenance: 'nav.maintenance',
+  Logistics: 'nav.logistics',
+  RPA: 'nav.rpa',
+  Settings: 'nav.settings'
+};
 
 type OperationsData = {
   productionOrders: ProductionOrder[];
@@ -52,7 +56,7 @@ const fallbackPersistence: SimulatorPersistenceStatus = {
   stateFile: '', snapshotExists: false, lastSavedAt: null, lastPersistedAt: null, restoredFrom: 'seed'
 };
 const fallbackAiSummary: AiDashboardSummary = {
-  totalQueries: 0, runningAgents: 0, agentFailures: 0, agentRpaTasks: 0, recentRecommendation: '최근 권장 조치 없음'
+  totalQueries: 0, runningAgents: 0, agentFailures: 0, agentRpaTasks: 0, recentRecommendation: ''
 };
 const fallbackManifest: PlatformManifest = {
   product: 'archive-nexus',
@@ -63,7 +67,7 @@ const fallbackManifest: PlatformManifest = {
   contractVersion: 'industry-app-contract/v1',
   environment: 'local',
   repository: 'https://github.com/CSJ-PJT/Archive-Nexus',
-  summary: '제조 도메인 데이터와 운영 판단을 소유하는 ArchiveOS 위의 Industry App입니다.',
+  summary: '__ARCHIVE_NEXUS_FALLBACK_MANIFEST_SUMMARY__',
   capabilities: [],
   contractEndpoints: [],
   dependencies: [],
@@ -74,6 +78,7 @@ const fallbackManifest: PlatformManifest = {
 };
 
 export function App() {
+  const { locale, setLocale, t, formatTime } = useI18n();
   const [tab, setTab] = useState<Tab>('Overview');
   const [overview, setOverview] = useState<Overview>(fallback);
   const [operations, setOperations] = useState<OperationsData>(emptyOperations);
@@ -83,7 +88,6 @@ export function App() {
   const [persistence, setPersistence] = useState<SimulatorPersistenceStatus>(fallbackPersistence);
   const [aiSummary, setAiSummary] = useState<AiDashboardSummary>(fallbackAiSummary);
   const [platformManifest, setPlatformManifest] = useState<PlatformManifest>(fallbackManifest);
-  const [language, setLanguage] = useState<LanguageCode>(() => readLanguage());
   const [loading, setLoading] = useState(true);
   const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState('');
@@ -94,7 +98,7 @@ export function App() {
       const archiveOsStatusRequest = api.archiveOsStatus().catch((cause): ArchiveOsStatus => ({
         status: 'UNAVAILABLE',
         httpStatus: null,
-        message: cause instanceof Error ? cause.message : 'ArchiveOS 상태를 확인할 수 없습니다.',
+        message: cause instanceof Error ? cause.message : t('error.archiveOsStatus'),
         checkedAt: new Date().toISOString()
       }));
       const platformManifestRequest = api.platformManifest().catch(() => fallbackManifest);
@@ -117,11 +121,11 @@ export function App() {
       setLastUpdatedAt(new Date());
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'API 연결 실패');
+      setError(cause instanceof Error ? cause.message : t('error.apiConnection'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -129,19 +133,13 @@ export function App() {
     return () => window.clearInterval(timer);
   }, [load]);
 
-  useEffect(() => {
-    window.localStorage.setItem('archive-nexus-language', language);
-    document.documentElement.lang = language;
-    document.documentElement.dataset.language = language;
-  }, [language]);
-
   const runAction = async (action: () => Promise<unknown>) => {
     setActionPending(true);
     try {
       await action();
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '작업 실행 실패');
+      setError(cause instanceof Error ? cause.message : t('error.actionFailed'));
     } finally {
       setActionPending(false);
     }
@@ -154,27 +152,27 @@ export function App() {
   return <main className="shell">
     <aside className="sidebar">
       <div className="brand"><img src="/archive-nexus-mark.svg" alt="" aria-hidden="true" /><div><strong>Archive Nexus</strong><span>Manufacturing AX</span></div></div>
-      <nav aria-label="주요 메뉴">{tabs.map((item) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>{item}</button>)}</nav>
+      <nav aria-label={t('nav.aria')}>{tabs.map((item) => <button key={item} className={tab === item ? 'active' : ''} onClick={() => setTab(item)}>{t(tabLabels[item])}</button>)}</nav>
     </aside>
     <section className="workspace">
       <header className="topbar">
-        <div className="topbar-title"><img src="/archive-nexus-mark.svg" alt="" aria-hidden="true" /><div><h1>{tab}</h1><p>ArchiveOS 제조 운영 관제 · {lastUpdatedAt ? `최근 동기화 ${formatTime(lastUpdatedAt)}` : '연결 중'}</p></div><span className={`integration-state ${(archiveOsStatus?.status ?? 'CHECKING').toLowerCase()}`}>ArchiveOS {archiveOsStatus?.status ?? 'CHECKING'}</span></div>
+        <div className="topbar-title"><img src="/archive-nexus-mark.svg" alt="" aria-hidden="true" /><div><h1>{t(tabLabels[tab])}</h1><p>ArchiveOS Manufacturing AX · {lastUpdatedAt ? t('common.latestSync', { time: formatTime(lastUpdatedAt) }) : t('common.connectionPending')}</p></div><span className={`integration-state ${(archiveOsStatus?.status ?? 'CHECKING').toLowerCase()}`}>ArchiveOS {archiveOsStatus?.status ?? 'CHECKING'}</span></div>
         <div className="actions">
-          <LanguageSelector value={language} onChange={setLanguage} />
-          <button className="icon-button secondary" onClick={() => void load()} title="데이터 새로고침" aria-label="데이터 새로고침"><RefreshCw size={17} /></button>
-          <button onClick={() => void runAction(api.startSimulator)} disabled={actionPending || overview.simulator.running}><Play size={17} />Start</button>
-          <button className="stop" onClick={() => void runAction(api.stopSimulator)} disabled={actionPending || !overview.simulator.running}><CircleStop size={17} />Stop</button>
+          <LanguageSelector value={locale} onChange={setLocale} />
+          <button className="icon-button secondary" onClick={() => void load()} title={t('common.refresh')} aria-label={t('common.refresh')}><RefreshCw size={17} /></button>
+          <button onClick={() => void runAction(api.startSimulator)} disabled={actionPending || overview.simulator.running}><Play size={17} />{t('common.start')}</button>
+          <button className="stop" onClick={() => void runAction(api.stopSimulator)} disabled={actionPending || !overview.simulator.running}><CircleStop size={17} />{t('common.stop')}</button>
         </div>
       </header>
       {error && <div className="notice" role="alert">{error}</div>}
       {loading ? <LoadingState /> : <>
-        <section className="metrics" aria-label="운영 핵심 지표">
-          <Metric icon={<Activity />} label="Tick" value={overview.simulator.tick} />
-          <Metric icon={<Factory />} label="Factories" value={overview.simulator.factoryCount} />
-          <Metric icon={<Gauge />} label="Workers" value={overview.simulator.parallelWorkerCount} />
-          <Metric icon={<AlertTriangle />} label="Critical" value={criticalCount} tone={criticalCount ? 'danger' : 'normal'} />
-          <Metric icon={<Boxes />} label="Stock risks" value={stockRiskCount} tone={stockRiskCount ? 'warning' : 'normal'} />
-          <Metric icon={<Truck />} label="Delayed" value={delayedCount} tone={delayedCount ? 'warning' : 'normal'} />
+        <section className="metrics" aria-label={t('metric.aria')}>
+          <Metric icon={<Activity />} label={t('metric.tick')} value={overview.simulator.tick} />
+          <Metric icon={<Factory />} label={t('metric.factories')} value={overview.simulator.factoryCount} />
+          <Metric icon={<Gauge />} label={t('metric.workers')} value={overview.simulator.parallelWorkerCount} />
+          <Metric icon={<AlertTriangle />} label={t('metric.critical')} value={criticalCount} tone={criticalCount ? 'danger' : 'normal'} />
+          <Metric icon={<Boxes />} label={t('metric.stockRisks')} value={stockRiskCount} tone={stockRiskCount ? 'warning' : 'normal'} />
+          <Metric icon={<Truck />} label={t('metric.delayed')} value={delayedCount} tone={delayedCount ? 'warning' : 'normal'} />
         </section>
         {tab === 'Overview' && <OverviewPanel overview={overview} operations={operations} aiSummary={aiSummary} />}
         {tab === 'Tasks' && <TaskOperationsPanel factories={overview.factories} tasks={operations.tasks} onChanged={load} />}
@@ -196,85 +194,92 @@ function Metric({ icon, label, value, tone = 'normal' }: { icon: ReactNode; labe
   return <div className={`metric ${tone}`}><span>{icon}</span><small>{label}</small><strong>{value}</strong></div>;
 }
 
-function LanguageSelector({ value, onChange }: { value: LanguageCode; onChange: (value: LanguageCode) => void }) {
-  return <label className="language-selector" title="Display language"><Globe2 size={15} aria-hidden="true" /><select aria-label="Display language" value={value} onChange={(event) => onChange(event.target.value as LanguageCode)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>;
+function LanguageSelector({ value, onChange }: { value: Locale; onChange: (value: Locale | string) => void }) {
+  const { t } = useI18n();
+  return <label className="language-selector" title={t('common.language')}><Globe2 size={15} aria-hidden="true" /><select aria-label={t('common.language')} value={value} onChange={(event) => onChange(event.target.value)}>{languageOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}</select></label>;
 }
 
 function OverviewPanel({ overview, operations, aiSummary }: { overview: Overview; operations: OperationsData; aiSummary: AiDashboardSummary }) {
+  const { t } = useI18n();
   const totalTarget = operations.productionOrders.reduce((sum, order) => sum + order.targetQuantity, 0);
   const totalProduced = operations.productionOrders.reduce((sum, order) => sum + order.producedQuantity, 0);
   const avgDefect = average(operations.qualityInspections.map((item) => item.defectRate));
   const openMaintenance = operations.maintenanceEvents.filter((item) => item.status === 'OPEN').length;
   return <div className="grid dashboard-grid">
-    <section className="panel wide"><PanelTitle icon={<AlertTriangle />} title="최근 이상 이벤트" count={overview.recentAlerts.length} /><EventList overview={overview} /></section>
-    <section className="panel"><PanelTitle icon={<Activity />} title="운영 상태" /><p className={overview.simulator.running ? 'state on' : 'state'}>{overview.simulator.running ? 'RUNNING' : 'STOPPED'}</p><dl className="summary-list"><Summary label="생산 달성률" value={percent(totalProduced, totalTarget)} /><Summary label="평균 불량률" value={formatPercent(avgDefect)} /><Summary label="미처리 정비" value={`${openMaintenance}건`} /><Summary label="승인 대기" value={`${overview.pendingRpaTasks.length}건`} /></dl></section>
-    <section className="panel full"><PanelTitle icon={<Factory />} title="공장 운영 현황" /><FactoryTable overview={overview} operations={operations} /></section>
-    <section className="panel full ai-overview"><PanelTitle icon={<Bot />} title="Manufacturing AI" /><div className="ai-overview-stats"><Summary label="최근 AI Query" value={`${aiSummary.totalQueries}건`} /><Summary label="실행 중 Agent" value={`${aiSummary.runningAgents}개`} /><Summary label="Agent 실패" value={`${aiSummary.agentFailures}건`} /><Summary label="Agent 기반 RPA" value={`${aiSummary.agentRpaTasks}건`} /></div><p><strong>최근 권장 조치</strong> · {aiSummary.recentRecommendation}</p></section>
+    <section className="panel wide"><PanelTitle icon={<AlertTriangle />} title={t('overview.recentAlerts')} count={overview.recentAlerts.length} /><EventList overview={overview} /></section>
+    <section className="panel"><PanelTitle icon={<Activity />} title={t('overview.operationalState')} /><p className={overview.simulator.running ? 'state on' : 'state'}>{overview.simulator.running ? 'RUNNING' : 'STOPPED'}</p><dl className="summary-list"><Summary label={t('overview.productionAchievement')} value={percent(totalProduced, totalTarget)} /><Summary label={t('overview.averageDefectRate')} value={formatPercent(avgDefect)} /><Summary label={t('overview.openMaintenance')} value={t('common.count', { count: openMaintenance })} /><Summary label={t('overview.pendingApproval')} value={t('common.count', { count: overview.pendingRpaTasks.length })} /></dl></section>
+    <section className="panel full"><PanelTitle icon={<Factory />} title={t('overview.factoryOperations')} /><FactoryTable overview={overview} operations={operations} /></section>
+    <section className="panel full ai-overview"><PanelTitle icon={<Bot />} title="Manufacturing AI" /><div className="ai-overview-stats"><Summary label={t('overview.recentAiQuery')} value={t('common.count', { count: aiSummary.totalQueries })} /><Summary label={t('overview.runningAgents')} value={t('common.units.agent', { count: aiSummary.runningAgents })} /><Summary label={t('overview.agentFailures')} value={t('common.count', { count: aiSummary.agentFailures })} /><Summary label={t('overview.agentRpaTasks')} value={t('common.count', { count: aiSummary.agentRpaTasks })} /></div><p><strong>{t('overview.recentRecommendation')}</strong> · {aiSummary.recentRecommendation || t('overview.noRecommendation')}</p></section>
   </div>;
 }
 
 function FactoriesPanel({ overview, operations, runAction }: { overview: Overview; operations: OperationsData; runAction: (action: () => Promise<unknown>) => Promise<void> }) {
+  const { t } = useI18n();
   const [form, setForm] = useState<FactoryControlRequest>({ id: '', name: '', kind: 'AUTOMOTIVE_PARTS', product: '', scenario: '', initialInventory: 2000, safetyStock: 800 });
   const update = <K extends keyof FactoryControlRequest>(key: K, value: FactoryControlRequest[K]) => setForm((current) => ({ ...current, [key]: value }));
   const createFactory = () => runAction(() => api.addFactory(form));
   const removeFactory = (factoryId: string) => runAction(() => api.removeFactory(factoryId));
   return <div className="grid">
-    <section className="panel full">
-      <PanelTitle icon={<Factory />} title="Factory Control" count={overview.factories.length} />
-      <div className="factory-control-form">
-        <label>Factory ID<input value={form.id} placeholder="Auto or FAC-D" onChange={(event) => update('id', event.target.value)} /></label>
-        <label>Name<input value={form.name} placeholder="Factory D" onChange={(event) => update('name', event.target.value)} /></label>
-        <label>Kind<select value={form.kind} onChange={(event) => update('kind', event.target.value as FactoryControlRequest['kind'])}><option value="AUTOMOTIVE_PARTS">AUTOMOTIVE_PARTS</option><option value="BATTERY_MODULE">BATTERY_MODULE</option><option value="ELECTRONICS">ELECTRONICS</option></select></label>
-        <label>Product<input value={form.product} placeholder="Battery pack" onChange={(event) => update('product', event.target.value)} /></label>
-        <label>Initial inventory<input type="number" min="1" value={form.initialInventory} onChange={(event) => update('initialInventory', Number(event.target.value))} /></label>
-        <label>Safety stock<input type="number" min="1" value={form.safetyStock} onChange={(event) => update('safetyStock', Number(event.target.value))} /></label>
-        <label className="wide-field">Scenario<input value={form.scenario} placeholder="Synthetic flexible production line" onChange={(event) => update('scenario', event.target.value)} /></label>
-        <button onClick={() => void createFactory()}><Plus size={15} />Add factory</button>
-      </div>
-    </section>
-    <section className="panel full">
-      <PanelTitle icon={<Factory />} title="Active Factories" count={overview.factories.length} />
-      <div className="factory-list">{overview.factories.map((factory) => {
-        const alerts = overview.recentAlerts.filter((item) => item.factoryId === factory.id);
-        const orders = operations.productionOrders.filter((item) => item.factoryId === factory.id);
-        const produced = orders.reduce((sum, item) => sum + item.producedQuantity, 0);
-        const target = orders.reduce((sum, item) => sum + item.targetQuantity, 0);
-        return <article className="panel" key={factory.id}><div className="card-heading"><div><h2>{factory.name}</h2><span className="muted">{factory.id} / {factory.kind}</span></div><StatusBadge value={alerts.some((item) => item.severity === 'CRITICAL') ? 'CRITICAL' : alerts.length ? 'WARNING' : 'NORMAL'} /></div><p>{factory.scenario}</p><dl className="summary-list"><Summary label="Production" value={percent(produced, target)} /><Summary label="Alerts" value={`${alerts.length}`} /><Summary label="Lines" value={`${factory.lines.length}`} /><Summary label="Product" value={factory.lines[0]?.product ?? '-'} /></dl><div className="inline-actions factory-card-actions"><button className="reject" disabled={overview.factories.length <= 1} onClick={() => void removeFactory(factory.id)}><Trash2 size={15} />Remove</button></div></article>;
-      })}</div>
-    </section>
+    <section className="panel full"><PanelTitle icon={<Factory />} title={t('factories.control')} count={overview.factories.length} /><div className="factory-control-form">
+      <label>{t('factories.id')}<input value={form.id} placeholder={t('factories.autoId')} onChange={(event) => update('id', event.target.value)} /></label>
+      <label>{t('factories.name')}<input value={form.name} placeholder={t('factories.namePlaceholder')} onChange={(event) => update('name', event.target.value)} /></label>
+      <label>{t('factories.kind')}<select value={form.kind} onChange={(event) => update('kind', event.target.value as FactoryControlRequest['kind'])}><option value="AUTOMOTIVE_PARTS">AUTOMOTIVE_PARTS</option><option value="BATTERY_MODULE">BATTERY_MODULE</option><option value="ELECTRONICS">ELECTRONICS</option></select></label>
+      <label>{t('factories.product')}<input value={form.product} placeholder={t('factories.productPlaceholder')} onChange={(event) => update('product', event.target.value)} /></label>
+      <label>{t('factories.initialInventory')}<input type="number" min="1" value={form.initialInventory} onChange={(event) => update('initialInventory', Number(event.target.value))} /></label>
+      <label>{t('factories.safetyStock')}<input type="number" min="1" value={form.safetyStock} onChange={(event) => update('safetyStock', Number(event.target.value))} /></label>
+      <label className="wide-field">{t('factories.scenario')}<input value={form.scenario} placeholder={t('factories.scenarioPlaceholder')} onChange={(event) => update('scenario', event.target.value)} /></label>
+      <button onClick={() => void createFactory()}><Plus size={15} />{t('factories.add')}</button>
+    </div></section>
+    <section className="panel full"><PanelTitle icon={<Factory />} title={t('factories.active')} count={overview.factories.length} /><div className="factory-list">{overview.factories.map((factory) => {
+      const alerts = overview.recentAlerts.filter((item) => item.factoryId === factory.id);
+      const orders = operations.productionOrders.filter((item) => item.factoryId === factory.id);
+      const produced = orders.reduce((sum, item) => sum + item.producedQuantity, 0);
+      const target = orders.reduce((sum, item) => sum + item.targetQuantity, 0);
+      return <article className="panel" key={factory.id}><div className="card-heading"><div><h2>{factory.name}</h2><span className="muted">{factory.id} / {factory.kind}</span></div><StatusBadge value={alerts.some((item) => item.severity === 'CRITICAL') ? 'CRITICAL' : alerts.length ? 'WARNING' : 'NORMAL'} /></div><p>{factory.scenario}</p><dl className="summary-list"><Summary label={t('factories.production')} value={percent(produced, target)} /><Summary label={t('factories.alerts')} value={`${alerts.length}`} /><Summary label={t('factories.lines')} value={`${factory.lines.length}`} /><Summary label={t('factories.product')} value={factory.lines[0]?.product ?? '-'} /></dl><div className="inline-actions factory-card-actions"><button className="reject" disabled={overview.factories.length <= 1} onClick={() => void removeFactory(factory.id)}><Trash2 size={15} />{t('factories.remove')}</button></div></article>;
+    })}</div></section>
   </div>;
 }
+
 function ProductionPanel({ orders }: { orders: ProductionOrder[] }) {
-  return <DataPanel icon={<Gauge />} title="생산 오더" count={orders.length}><Table headers={['오더', '공장', '제품', '목표', '실적', '달성률', '상태']} rows={orders.slice().reverse().map((order) => [order.id, order.factoryId, order.product, order.targetQuantity, order.producedQuantity, percent(order.producedQuantity, order.targetQuantity), <StatusBadge value={order.status} />])} /></DataPanel>;
+  const { t } = useI18n();
+  return <DataPanel icon={<Gauge />} title={t('production.orders')} count={orders.length}><Table headers={[t('table.order'), t('table.factory'), t('table.product'), t('table.target'), t('table.actual'), t('table.achievement'), t('table.status')]} rows={orders.slice().reverse().map((order) => [order.id, order.factoryId, order.product, order.targetQuantity, order.producedQuantity, percent(order.producedQuantity, order.targetQuantity), <StatusBadge value={order.status} />])} /></DataPanel>;
 }
 
 function InventoryPanel({ items, transactions }: { items: InventoryItem[]; transactions: InventoryTransaction[] }) {
-  return <div className="grid"><DataPanel icon={<Boxes />} title="재고 현황" count={items.length}><Table headers={['품목', '유형', '현재고', '안전재고', '상태']} rows={items.map((item) => [item.name, item.type, item.quantity, item.safetyStock, <StatusBadge value={item.quantity <= item.safetyStock ? 'LOW' : 'NORMAL'} />])} /></DataPanel><DataPanel icon={<Clock3 />} title="최근 입출고" count={transactions.length}><Table headers={['공장', '품목', '구분', '수량', '발생 시각']} rows={transactions.slice(-8).reverse().map((item) => [item.factoryId, item.itemId, item.type, item.quantity, formatDate(item.occurredAt)])} /></DataPanel></div>;
+  const { t, formatDate } = useI18n();
+  return <div className="grid"><DataPanel icon={<Boxes />} title={t('inventory.status')} count={items.length}><Table headers={[t('table.item'), t('table.type'), t('table.currentStock'), t('table.safetyStock'), t('table.status')]} rows={items.map((item) => [item.name, item.type, item.quantity, item.safetyStock, <StatusBadge value={item.quantity <= item.safetyStock ? 'LOW' : 'NORMAL'} />])} /></DataPanel><DataPanel icon={<Clock3 />} title={t('inventory.recentTransactions')} count={transactions.length}><Table headers={[t('table.factory'), t('table.item'), t('table.type'), t('table.quantity'), t('table.occurredAt')]} rows={transactions.slice(-8).reverse().map((item) => [item.factoryId, item.itemId, item.type, item.quantity, formatDate(item.occurredAt)])} /></DataPanel></div>;
 }
 
 function QualityPanel({ inspections }: { inspections: QualityInspection[] }) {
-  return <DataPanel icon={<CheckCircle2 />} title="Lot 품질 검사" count={inspections.length}><Table headers={['검사', '공장', 'Lot', '불량률', '판정']} rows={inspections.slice().reverse().map((item) => [item.id, item.factoryId, item.lotId, formatPercent(item.defectRate), <StatusBadge value={item.result} />])} /></DataPanel>;
+  const { t } = useI18n();
+  return <DataPanel icon={<CheckCircle2 />} title={t('quality.inspections')} count={inspections.length}><Table headers={[t('table.inspection'), t('table.factory'), 'Lot', t('table.result'), t('table.status')]} rows={inspections.slice().reverse().map((item) => [item.id, item.factoryId, item.lotId, formatPercent(item.defectRate), <StatusBadge value={item.result} />])} /></DataPanel>;
 }
 
 function MaintenancePanel({ events }: { events: MaintenanceEvent[] }) {
-  return <DataPanel icon={<Wrench />} title="설비 정비 이벤트" count={events.length}><Table headers={['이벤트', '공장', '설비', '심각도', '원인', '상태']} rows={events.slice().reverse().map((item) => [item.id, item.factoryId, item.machineId, <StatusBadge value={item.severity} />, item.cause, item.status])} /></DataPanel>;
+  const { t } = useI18n();
+  return <DataPanel icon={<Wrench />} title={t('maintenance.events')} count={events.length}><Table headers={[t('table.event'), t('table.factory'), t('table.equipment'), t('table.severity'), t('table.cause'), t('table.status')]} rows={events.slice().reverse().map((item) => [item.id, item.factoryId, item.machineId, <StatusBadge value={item.severity} />, item.cause, <StatusBadge value={item.status} />])} /></DataPanel>;
 }
 
 function LogisticsPanel({ shipments }: { shipments: LogisticsShipment[] }) {
-  return <DataPanel icon={<Truck />} title="출하 관제" count={shipments.length}><Table headers={['출하', '공장', '도착지', '우선순위', '상태']} rows={shipments.slice().reverse().map((item) => [item.id, item.factoryId, item.destination, item.priority, <StatusBadge value={item.status} />])} /></DataPanel>;
+  const { t } = useI18n();
+  return <DataPanel icon={<Truck />} title={t('logistics.control')} count={shipments.length}><Table headers={[t('table.shipment'), t('table.factory'), t('table.destination'), t('table.priority'), t('table.status')]} rows={shipments.slice().reverse().map((item) => [item.id, item.factoryId, item.destination, item.priority, <StatusBadge value={item.status} />])} /></DataPanel>;
 }
 
 function RpaPanel({ tasks, runAction }: { tasks: RpaTask[]; runAction: (action: () => Promise<unknown>) => Promise<void> }) {
-  return <DataPanel icon={<ShieldCheck />} title="ArchiveOS RPA 작업" count={tasks.length}><div className="task-list">{tasks.length === 0 ? <EmptyState /> : tasks.slice().reverse().map((task) => <article key={task.id}><div className="card-heading"><div><strong>{task.id}</strong><span className="muted">{task.factoryId} · {formatDate(task.createdAt)}</span></div><StatusBadge value={task.status} /></div><p>{task.recommendation}</p>{task.status === 'APPROVAL_REQUIRED' && <div className="inline-actions"><button onClick={() => void runAction(() => api.approveRpa(task.id))}>Approve</button><button className="reject" onClick={() => void runAction(() => api.rejectRpa(task.id))}>Reject</button></div>}</article>)}</div></DataPanel>;
+  const { t, formatDate } = useI18n();
+  return <DataPanel icon={<ShieldCheck />} title={t('rpa.tasks')} count={tasks.length}><div className="task-list">{tasks.length === 0 ? <EmptyState /> : tasks.slice().reverse().map((task) => <article key={task.id}><div className="card-heading"><div><strong>{task.id}</strong><span className="muted">{task.factoryId} · {formatDate(task.createdAt)}</span></div><StatusBadge value={task.status} /></div><p>{task.recommendation}</p>{task.status === 'APPROVAL_REQUIRED' && <div className="inline-actions"><button onClick={() => void runAction(() => api.approveRpa(task.id))}>{t('common.approve')}</button><button className="reject" onClick={() => void runAction(() => api.rejectRpa(task.id))}>{t('common.reject')}</button></div>}</article>)}</div></DataPanel>;
 }
 
 function SettingsPanel({ overview, batchSnapshots, archiveOsInteractions, persistence, archiveOsStatus, manifest }: { overview: Overview; batchSnapshots: BatchSnapshot[]; archiveOsInteractions: ArchiveOsInteraction[]; persistence: SimulatorPersistenceStatus; archiveOsStatus: ArchiveOsStatus | null; manifest: PlatformManifest }) {
+  const { t, formatDate } = useI18n();
   const latestSnapshot = batchSnapshots[batchSnapshots.length - 1];
-  return <div className="grid"><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="Platform Contract" /><p>{manifest.summary}</p><dl className="summary-list"><Summary label="제품군" value={manifest.productLine} /><Summary label="역할" value={manifest.role} /><Summary label="계약 버전" value={manifest.contractVersion} /><Summary label="환경" value={manifest.environment} /></dl><div className="tag-row">{manifest.capabilities.slice(0, 6).map((capability) => <span className="agent-tag" key={capability.id}>{capability.name}</span>)}</div></section><section className="panel"><PanelTitle icon={<Database />} title="런타임 저장소" /><dl className="summary-list"><Summary label="저장 모드" value={persistence.storageMode} /><Summary label="PostgreSQL" value={persistence.dbAvailable ? 'AVAILABLE' : 'UNAVAILABLE'} /><Summary label="파일 백업" value={persistence.fileSnapshotAvailable ? 'AVAILABLE' : 'EMPTY'} /><Summary label="복구 원본" value={persistence.restoredFrom} /><Summary label="최근 저장" value={formatDate(persistence.lastSavedAt ?? persistence.lastPersistedAt)} /></dl></section><section className="panel"><PanelTitle icon={<Activity />} title="Batch Snapshot" /><dl className="summary-list"><Summary label="스냅샷" value={`${batchSnapshots.length}개`} /><Summary label="최근 tick" value={String(latestSnapshot?.tick ?? 0)} /><Summary label="평균 불량률" value={formatPercent(latestSnapshot?.averageDefectRate ?? 0)} /><Summary label="승인 대기" value={`${latestSnapshot?.pendingApprovalCount ?? 0}건`} /><Summary label="시뮬레이터" value={overview.simulator.running ? 'RUNNING' : 'STOPPED'} /></dl></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="ArchiveOS 연동 상태" /><div className={`integration-detail ${(archiveOsStatus?.status ?? 'UNAVAILABLE').toLowerCase()}`}><StatusBadge value={archiveOsStatus?.status ?? 'CHECKING'} /><div><strong>{archiveOsStatus?.message ?? 'ArchiveOS 상태를 확인하고 있습니다.'}</strong><small>{archiveOsStatus?.checkedAt ? `최근 확인 ${formatDate(archiveOsStatus.checkedAt)}` : '상태 확인 대기'}</small></div></div></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title="ArchiveOS 상호작용" count={archiveOsInteractions.length} /><Table headers={['시각', '유형', '공장', '내용']} rows={archiveOsInteractions.slice(-10).reverse().map((item) => [formatDate(item.occurredAt), item.type, item.factoryId ?? 'ArchiveOS', item.payload])} /></section></div>;
+  const manifestSummary = manifest.summary === fallbackManifest.summary ? t('settings.fallbackManifestSummary') : manifest.summary;
+  return <div className="grid"><section className="panel full"><PanelTitle icon={<ShieldCheck />} title={t('settings.platformContract')} /><p>{manifestSummary}</p><dl className="summary-list"><Summary label={t('settings.productLine')} value={manifest.productLine} /><Summary label={t('settings.role')} value={manifest.role} /><Summary label={t('settings.contractVersion')} value={manifest.contractVersion} /><Summary label={t('settings.environment')} value={manifest.environment} /></dl><div className="tag-row">{manifest.capabilities.slice(0, 6).map((capability) => <span className="agent-tag" key={capability.id}>{capability.name}</span>)}</div></section><section className="panel"><PanelTitle icon={<Database />} title={t('settings.runtimeStorage')} /><dl className="summary-list"><Summary label={t('settings.storageMode')} value={persistence.storageMode} /><Summary label="PostgreSQL" value={persistence.dbAvailable ? 'AVAILABLE' : 'UNAVAILABLE'} /><Summary label={t('settings.fileBackup')} value={persistence.fileSnapshotAvailable ? 'AVAILABLE' : 'EMPTY'} /><Summary label={t('settings.restoreSource')} value={persistence.restoredFrom} /><Summary label={t('settings.lastSaved')} value={formatDate(persistence.lastSavedAt ?? persistence.lastPersistedAt)} /></dl></section><section className="panel"><PanelTitle icon={<Activity />} title={t('settings.batchSnapshot')} /><dl className="summary-list"><Summary label={t('settings.snapshot')} value={t('common.units.agent', { count: batchSnapshots.length })} /><Summary label={t('settings.latestTick')} value={String(latestSnapshot?.tick ?? 0)} /><Summary label={t('overview.averageDefectRate')} value={formatPercent(latestSnapshot?.averageDefectRate ?? 0)} /><Summary label={t('overview.pendingApproval')} value={t('common.count', { count: latestSnapshot?.pendingApprovalCount ?? 0 })} /><Summary label={t('settings.simulator')} value={overview.simulator.running ? 'RUNNING' : 'STOPPED'} /></dl></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title={t('settings.archiveOsStatus')} /><div className={`integration-detail ${(archiveOsStatus?.status ?? 'UNAVAILABLE').toLowerCase()}`}><StatusBadge value={archiveOsStatus?.status ?? 'CHECKING'} /><div><strong>{archiveOsStatus?.message ?? t('settings.archiveOsChecking')}</strong><small>{archiveOsStatus?.checkedAt ? t('settings.latestCheck', { time: formatDate(archiveOsStatus.checkedAt) }) : t('settings.checkPending')}</small></div></div></section><section className="panel full"><PanelTitle icon={<ShieldCheck />} title={t('settings.archiveOsInteractions')} count={archiveOsInteractions.length} /><Table headers={[t('table.time'), t('table.type'), t('table.factory'), t('table.content')]} rows={archiveOsInteractions.slice(-10).reverse().map((item) => [formatDate(item.occurredAt), item.type, item.factoryId ?? 'ArchiveOS', item.payload])} /></section></div>;
 }
 
 function FactoryTable({ overview, operations }: { overview: Overview; operations: OperationsData }) {
-  return <Table headers={['공장', '생산 오더', '품질 검사', '출하', '정비', '경보', '상태']} rows={overview.factories.map((factory) => {
+  const { t } = useI18n();
+  return <Table headers={[t('table.factory'), t('production.orders'), t('quality.inspections'), t('table.shipment'), t('table.maintenance'), t('table.alert'), t('table.status')]} rows={overview.factories.map((factory) => {
     const count = <T extends { factoryId: string }>(items: T[]) => items.filter((item) => item.factoryId === factory.id).length;
     const factoryAlerts = overview.recentAlerts.filter((item) => item.factoryId === factory.id);
     const status = factoryAlerts.some((item) => item.severity === 'CRITICAL') ? 'CRITICAL' : factoryAlerts.length ? 'WARNING' : 'NORMAL';
@@ -285,13 +290,11 @@ function FactoryTable({ overview, operations }: { overview: Overview; operations
 function DataPanel({ icon, title, count, children }: { icon: ReactNode; title: string; count: number; children: ReactNode }) { return <section className="panel full"><PanelTitle icon={icon} title={title} count={count} />{children}</section>; }
 function PanelTitle({ icon, title, count }: { icon: ReactNode; title: string; count?: number }) { return <div className="panel-title"><h2>{icon}{title}</h2>{count !== undefined && <span>{count}</span>}</div>; }
 function Table({ headers, rows }: { headers: string[]; rows: ReactNode[][] }) { return rows.length === 0 ? <EmptyState /> : <div className="table-wrap"><table><thead><tr>{headers.map((header) => <th key={header}>{header}</th>)}</tr></thead><tbody>{rows.map((row, rowIndex) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>; }
-function EventList({ overview }: { overview: Overview }) { return overview.recentAlerts.length === 0 ? <EmptyState label="현재 감지된 이상 이벤트가 없습니다." /> : <div className="event-list">{overview.recentAlerts.map((alert) => <article key={alert.id}><StatusBadge value={alert.severity} /><div><strong>{alert.factoryId} · {alert.category}</strong><p>{alert.message}</p><small>{formatDate(alert.occurredAt)}</small></div></article>)}</div>; }
-function StatusBadge({ value }: { value: string }) { const danger = ['CRITICAL', 'FAILED', 'REJECTED', 'DELAYED', 'HOLD', 'NG'].includes(value); const warning = ['WARNING', 'LOW', 'OPEN', 'APPROVAL_REQUIRED'].includes(value); return <span className={`status-badge ${danger ? 'danger' : warning ? 'warning' : 'success'}`}>{value}</span>; }
+function EventList({ overview }: { overview: Overview }) { const { t, formatDate } = useI18n(); return overview.recentAlerts.length === 0 ? <EmptyState label={t('overview.noAlerts')} /> : <div className="event-list">{overview.recentAlerts.map((alert) => <article key={alert.id}><StatusBadge value={alert.severity} /><div><strong>{alert.factoryId} · {alert.category}</strong><p>{alert.message}</p><small>{formatDate(alert.occurredAt)}</small></div></article>)}</div>; }
+function StatusBadge({ value }: { value: string }) { const { statusLabel } = useI18n(); const danger = ['CRITICAL', 'FAILED', 'REJECTED', 'DELAYED', 'HOLD', 'NG'].includes(value); const warning = ['WARNING', 'LOW', 'OPEN', 'APPROVAL_REQUIRED', 'PENDING', 'DRAFT', 'ANALYZING', 'WAITING_APPROVAL', 'RUNNING', 'VERIFYING', 'RETRY_REQUESTED', 'CANCELLED'].includes(value); return <span className={`status-badge ${danger ? 'danger' : warning ? 'warning' : 'success'}`} title={value}>{statusLabel(value)}</span>; }
 function Summary({ label, value }: { label: string; value: string }) { return <div><dt>{label}</dt><dd>{value}</dd></div>; }
-function EmptyState({ label = '표시할 운영 데이터가 없습니다.' }: { label?: string }) { return <div className="empty-state">{label}</div>; }
-function LoadingState() { return <div className="loading-state"><RefreshCw size={22} />운영 데이터를 불러오는 중입니다.</div>; }
+function EmptyState({ label }: { label?: string }) { const { t } = useI18n(); return <div className="empty-state">{label ?? t('common.noData')}</div>; }
+function LoadingState() { const { t } = useI18n(); return <div className="loading-state"><RefreshCw size={22} />{t('common.loading')}</div>; }
 function average(values: number[]) { return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0; }
 function percent(value: number, total: number) { return total ? `${Math.round((value / total) * 100)}%` : '0%'; }
 function formatPercent(value: number) { return `${(value * 100).toFixed(2)}%`; }
-function formatTime(value: Date) { return new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(value); }
-function formatDate(value?: string | null) { return value ? new Intl.DateTimeFormat('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '-'; }

@@ -61,6 +61,17 @@ Factory Runtime
 - Set `ARCHIVE_INTEGRATIONS_*_ENABLED=false` to isolate Nexus when a downstream service must be held.
 - External service failures must not terminate simulator, dashboard, or manufacturing APIs.
 
+## Language Support
+
+The frontend supports 한국어, English, 日本語, and 简体中文. Operators can switch language from the globe menu in the top-right corner.
+
+- Default locale: `ko`
+- Persisted localStorage key: `archive.locale`
+- Legacy compatibility key: `archive-nexus-language`
+- Unsupported locale values fall back to Korean.
+- UI labels are translated, but API paths, event types, enum values, IDs, repository names, and product names remain unchanged.
+- Internal compatibility keys such as `logitics` may remain for existing API, DB, and environment contracts while external documentation uses `Archive-Logistics`.
+
 ## Local Run
 
 ```powershell
