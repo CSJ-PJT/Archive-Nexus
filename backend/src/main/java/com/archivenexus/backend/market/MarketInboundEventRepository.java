@@ -17,5 +17,5 @@ public interface MarketInboundEventRepository extends JpaRepository<MarketInboun
     long countBySourceAndProcessingStatus(String source, MarketEventStatus status);
     List<MarketInboundEventEntity> findAllByOrderByReceivedAtDesc(Pageable pageable);
     List<MarketInboundEventEntity> findAllByProcessingStatusOrderByReceivedAtDesc(MarketEventStatus status, Pageable pageable);
+    List<MarketInboundEventEntity> findAllByCorrelationIdOrderByReceivedAtDesc(String correlationId, Pageable pageable);
 }
-

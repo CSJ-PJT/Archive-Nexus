@@ -2,6 +2,39 @@
 
 This document lists the operational APIs used to run and inspect Archive-Nexus locally.
 
+## ArchiveOS Live Flow / Operational Twin
+
+ArchiveOS는 다음 read-only API로 Nexus runtime 상태를 수집한다.
+
+```http
+GET /api/operations/summary
+GET /api/runtime-events/recent?limit=100
+GET /api/runtime-events/correlation/{correlationId}
+GET /api/runtime-events/entity/{entityId}
+```
+
+`/api/runtime-events/*` 응답은 공통 runtime event 필드를 사용한다.
+
+```json
+{
+  "eventId": "NX-EVT-...",
+  "sourceService": "Archive-Nexus",
+  "domain": "manufacturing",
+  "eventType": "PRODUCTION_COMPLETED",
+  "entityType": "production-order",
+  "entityId": "ORD-001",
+  "correlationId": "CORR-001",
+  "causationId": "CAUSE-001",
+  "status": "completed",
+  "severity": "info",
+  "displayLabel": "PRODUCTION_COMPLETED routed to LEDGER",
+  "occurredAt": "2026-07-10T00:00:00Z",
+  "metadata": {}
+}
+```
+
+metadata는 Synthetic Runtime Data만 포함한다. 실제 이름, 전화번호, 주소, 카드번호, 계좌번호, 결제 토큰, secret은 포함하지 않는다.
+
 ## Outbox
 
 ### Summary

@@ -101,6 +101,10 @@ ArchiveOS 또는 Archive-Market이 합성 운영 인력을 배정하면 Nexus는
 
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
+| `GET` | `/api/operations/summary` | ArchiveOS Operational Twin용 read-only 운영 요약 |
+| `GET` | `/api/runtime-events/recent?limit=100` | 최신 runtime event 조회 |
+| `GET` | `/api/runtime-events/correlation/{correlationId}` | correlationId 기준 runtime event 추적 |
+| `GET` | `/api/runtime-events/entity/{entityId}` | entityId 기준 runtime event 추적 |
 | `GET` | `/api/outbox/summary` | Outbox 상태/대상별 집계 |
 | `GET` | `/api/outbox/events` | Outbox 이벤트 목록. `status`, `targetService` 필터 지원 |
 | `GET` | `/api/outbox/events/{eventId}` | 단일 Outbox 이벤트 조회 |
@@ -270,6 +274,9 @@ docker compose config --quiet
 
 - [아키텍처](docs/architecture.md)
 - [API 참고 문서](docs/api-reference.md)
+- [ArchiveOS Live Flow 계약](docs/archiveos-live-flow-contract.md)
+- [Runtime Event 계약](docs/runtime-event-contract.md)
+- [Operations Summary 계약](docs/operations-summary-contract.md)
 - [Outbox 라우팅](docs/outbox-routing.md)
 - [Archive-Market 연동 계약](docs/market-integration-contract.md)
 - [운영 인력 모델](docs/operational-workforce.md)
