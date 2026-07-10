@@ -11,6 +11,22 @@ Archive-Nexus stores synthetic manufacturing events in `nexus_outbox_event` and 
 | `NONE` | `SHIPMENT_HOLD_CREATED` | Skip external publish |
 | `UNKNOWN` | Unsupported event type | Skip and expose as routing issue |
 
+### Market inbound mapping
+
+Archive-Market inbound events are translated to outbox events and then routed through the same policy.
+
+| Market event | Mapped outbox event | Target outcome |
+| --- | --- | --- |
+| `MARKET_ORDER_PLACED` | none | Stored for demand visibility only |
+| `PRODUCTION_REQUESTED` | `PRODUCTION_COMPLETED` | `LEDGER` |
+| `SHIPMENT_REQUESTED` | `LOGISTICS_DISPATCHED` (if `requiresShipment=true`) / `SHIPMENT_HOLD_CREATED` (if `requiresShipment=false`) | `LOGITICS` or `NONE` |
+| `ORDER_CANCELLED` | `SHIPMENT_HOLD_CREATED` | `NONE` |
+| `RETURN_REQUESTED` | `QUALITY_DEFECT_DETECTED` | `LEDGER` |
+| `QUALITY_CLAIM_CREATED` | `QUALITY_CLAIM_CHARGED` | `LEDGER` |
+
+Market payload fields are preserved in mapped payload with metadata namespace `marketPayload`, plus:
+`orderId`, `customerId`, `customerType`, `riskLevel`, `productType`, `quantity`, `totalAmount`, `orderAmount`, `priority`, `requiresShipment`, `returnId`, `claimId`, `simulationRunId`, `settlementCycleId`, `correlationId`, `causationId`, `hopCount`, `maxHop`.
+
 `Archive-Logistics` is the external service name. Existing values `LOGITICS`, `logitics`, and `ARCHIVE_INTEGRATIONS_LOGITICS_*` remain in API and configuration for backward compatibility.
 
 ## Publish Modes

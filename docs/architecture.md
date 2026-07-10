@@ -33,6 +33,23 @@ flowchart LR
   C --> H[ArchiveOS Summary Polling]
 ```
 
+### Market inbound events
+
+Archive-Market synthetic commerce events are accepted at `/api/events/market` and may produce outbox candidates before normal routing:
+
+```mermaid
+flowchart LR
+  M[Archive-Market] -->|market event API| N[Market Inbound (nexus_market_event)]
+  N -->|mapping| C
+  C -->|PRODUCTION_REQUESTED| F
+  C -->|SHIPMENT_REQUESTED| E
+  C -->|ORDER_CANCELLED| G
+  C -->|RETURN_REQUESTED| F
+  C -->|QUALITY_CLAIM_CREATED| F
+  C -->|MARKET_ORDER_PLACED| N
+  C --> H
+```
+
 ## Routing Contract
 
 The route is derived from `eventType` and stored as `target_service`.
@@ -77,3 +94,9 @@ Nexus treats external integrations as optional. If Archive-Logistics, Archive-Le
 - failure evidence is stored on outbox events;
 - `/api/outbox/summary` and `/api/integrations/summary` remain available for control tower polling.
 
+## External Inbound Integration
+
+- `ARCHIVE_INTEGRATIONS_MARKET_ENABLED` controls acceptance behavior for downsteam publish decisions only.
+- Market event acceptance API (`/api/events/market*`) continues to persist events even when downstream integrations are disabled.
+- Market duplicate guard uses `idempotencyKey` first, then `eventId`.
+- Hop guard (`hopCount > maxHop`) is rejected and persisted as `REJECTED`.

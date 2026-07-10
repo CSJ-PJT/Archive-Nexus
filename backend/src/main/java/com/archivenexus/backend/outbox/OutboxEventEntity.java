@@ -94,8 +94,14 @@ public class OutboxEventEntity {
 
     public OutboxEventEntity(String eventId, String idempotencyKey, EventType eventType, String aggregateType,
                              String aggregateId, String payload, Instant occurredAt, Instant createdAt) {
+        this(eventId, idempotencyKey, "Archive-Nexus", eventType, aggregateType, aggregateId, payload, occurredAt, createdAt);
+    }
+
+    public OutboxEventEntity(String eventId, String idempotencyKey, String source, EventType eventType, String aggregateType,
+                             String aggregateId, String payload, Instant occurredAt, Instant createdAt) {
         this.eventId = eventId;
         this.idempotencyKey = idempotencyKey;
+        this.source = source == null || source.isBlank() ? "Archive-Nexus" : source;
         this.eventType = eventType;
         this.aggregateType = aggregateType;
         this.aggregateId = aggregateId;

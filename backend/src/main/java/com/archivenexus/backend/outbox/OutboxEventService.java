@@ -1,6 +1,8 @@
 package com.archivenexus.backend.outbox;
 
 import com.archivenexus.backend.outbox.OutboxModels.*;
+import com.archivenexus.backend.market.MarketInboundEventRepository;
+import com.archivenexus.backend.market.MarketEventModels.MarketEventStatus;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,19 +56,25 @@ public class OutboxEventService {
     private final OutboxPublishRouter router;
     private final OutboxRoutingPolicy routingPolicy;
     private final ObjectMapper mapper;
+    private final MarketInboundEventRepository marketInboundEventRepository;
     private final int publishBatchSize;
     private final int maxRetryCount;
+    private final boolean marketInboundEnabled;
 
     public OutboxEventService(OutboxEventRepository repository,
                               OutboxPublishRouter router,
                               OutboxRoutingPolicy routingPolicy,
+                              MarketInboundEventRepository marketInboundEventRepository,
                               ObjectMapper mapper,
                               @Value("${archive.integrations.routing.chunk-size:${archive-nexus.ledger.publish-batch-size:50}}") int publishBatchSize,
-                              @Value("${archive.integrations.routing.max-retry-count:5}") int maxRetryCount) {
+                              @Value("${archive.integrations.routing.max-retry-count:5}") int maxRetryCount,
+                              @Value("${archive.integrations.market.enabled:false}") boolean marketInboundEnabled) {
         this.repository = repository;
         this.router = router;
         this.routingPolicy = routingPolicy;
+        this.marketInboundEventRepository = marketInboundEventRepository;
         this.mapper = mapper;
+        this.marketInboundEnabled = marketInboundEnabled;
         this.publishBatchSize = Math.max(1, Math.min(publishBatchSize, 500));
         this.maxRetryCount = Math.max(1, maxRetryCount);
     }
@@ -74,6 +82,13 @@ public class OutboxEventService {
     @Transactional
     public Optional<OutboxEventResponse> emit(EventType type, String aggregateType, String aggregateId,
                                              String idempotencyKey, Map<String, Object> payload, Instant occurredAt) {
+        return emit(type, aggregateType, aggregateId, idempotencyKey, payload, occurredAt, "Archive-Nexus");
+    }
+
+    @Transactional
+    public Optional<OutboxEventResponse> emit(EventType type, String aggregateType, String aggregateId,
+                                             String idempotencyKey, Map<String, Object> payload, Instant occurredAt,
+                                             String source) {
         if (repository.existsByIdempotencyKey(idempotencyKey)) {
             return Optional.empty();
         }
@@ -82,6 +97,7 @@ public class OutboxEventService {
             OutboxEventEntity event = new OutboxEventEntity(
                     "NX-EVT-" + UUID.randomUUID().toString().substring(0, 13).toUpperCase(),
                     idempotencyKey,
+                    source,
                     type,
                     aggregateType,
                     aggregateId,
@@ -177,7 +193,12 @@ public class OutboxEventService {
                 "Archive-Nexus",
                 "HEALTHY",
                 integrationStatesWithHealth(),
-                new RoutingConfig("AUTO", router.allowLedgerDirectFallbackForLogistics())
+                new RoutingConfig("AUTO", router.allowLedgerDirectFallbackForLogistics()),
+                marketInboundEnabled,
+                marketInboundEventRepository.count(),
+                marketInboundEventRepository.countByProcessingStatus(MarketEventStatus.PROCESSED),
+                marketInboundEventRepository.countByProcessingStatus(MarketEventStatus.FAILED) + marketInboundEventRepository.countByProcessingStatus(MarketEventStatus.REJECTED),
+                repository.countBySource("Archive-Market")
         );
     }
 

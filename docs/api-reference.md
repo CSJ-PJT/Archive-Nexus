@@ -67,6 +67,41 @@ GET /api/platform/manifest
 
 These APIs keep returning a Nexus-level response even if an external service is disabled or unavailable.
 
+## Archive-Market Inbound APIs
+
+```http
+POST /api/events/market
+POST /api/events/market/bulk
+GET /api/events/market
+GET /api/events/market?status=PROCESSED
+```
+
+Supported Market event types:
+
+- `MARKET_ORDER_PLACED`
+- `PRODUCTION_REQUESTED`
+- `SHIPMENT_REQUESTED`
+- `ORDER_CANCELLED`
+- `RETURN_REQUESTED`
+- `QUALITY_CLAIM_CREATED`
+
+Mapping summary:
+
+- `PRODUCTION_REQUESTED` → `PRODUCTION_COMPLETED` (Ledger target)
+- `SHIPMENT_REQUESTED` → `LOGISTICS_DISPATCHED` / `SHIPMENT_HOLD_CREATED`
+- `ORDER_CANCELLED` → `SHIPMENT_HOLD_CREATED`
+- `RETURN_REQUESTED` → `QUALITY_DEFECT_DETECTED`
+- `QUALITY_CLAIM_CREATED` → `QUALITY_CLAIM_CHARGED`
+- `MARKET_ORDER_PLACED` → no immediate outbox emission
+
+`GET /api/integrations/summary` includes:
+
+- `marketInboundEnabled`
+- `marketEventsReceived`
+- `marketEventsProcessed`
+- `marketEventsFailed`
+- `marketOriginOutboxEvents`
+
 ## Archive-Logistics Daily Settlement Callback
 
 Archive-Nexus receives synthetic daily manufacturing settlement callbacks from Archive-Logistics.

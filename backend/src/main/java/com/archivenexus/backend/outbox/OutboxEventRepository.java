@@ -22,5 +22,6 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
     long countByEventType(OutboxModels.EventType eventType);
     long countByTargetService(OutboxTargetService targetService);
     long countByTargetServiceAndStatus(OutboxTargetService targetService, OutboxStatus status);
+    long countBySource(String source);
     List<OutboxEventEntity> findTop1ByTargetServiceAndStatusInAndLastErrorIsNotNullOrderByLastPublishAttemptAtDesc(OutboxTargetService targetService, Collection<OutboxStatus> statuses);
 }

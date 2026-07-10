@@ -133,7 +133,12 @@ public final class OutboxModels {
             String service,
             String status,
             Map<String, IntegrationState> integrations,
-            RoutingConfig routing
+            RoutingConfig routing,
+            boolean marketInboundEnabled,
+            long marketEventsReceived,
+            long marketEventsProcessed,
+            long marketEventsFailed,
+            long marketOriginOutboxEvents
     ) {
     }
 

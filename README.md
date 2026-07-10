@@ -42,10 +42,13 @@ Factory Runtime
 | --- | --- | --- |
 | `GET` | `/api/outbox/summary` | Outbox counts by status and target service |
 | `GET` | `/api/integrations/summary` | Archive-Logistics / Archive-Ledger configuration and health summary |
+| `GET` | `/api/events/market` | List inbound Archive-Market events (`limit`, `status` filter) |
 | `GET` | `/api/outbox/events` | Outbox event list with `status` and `targetService` filters |
 | `GET` | `/api/outbox/events/{eventId}` | Single outbox event lookup |
 | `POST` | `/api/outbox/events/generate?count=100&type=logistics` | Generate synthetic events |
 | `POST` | `/api/outbox/events/publish?target=auto&dryRun=true` | Route or publish outbox candidates |
+| `POST` | `/api/events/market` | Receive Archive-Market synthetic order/production/shipment/claim events |
+| `POST` | `/api/events/market/bulk` | Receive Archive-Market event batch |
 | `POST` | `/api/logistics/settlements/daily` | Receive synthetic daily manufacturing settlement from Archive-Logistics |
 | `GET` | `/api/logistics/settlements/summary` | Inspect received Logistics settlement callback status |
 | `GET` | `/api/archiveos/status` | ArchiveOS availability state |
@@ -107,6 +110,7 @@ Do not commit `.env`, tokens, webhooks, private keys, or local data directories.
 ```powershell
 curl.exe "http://localhost:8080/api/outbox/summary"
 curl.exe "http://localhost:8080/api/integrations/summary"
+curl.exe "http://localhost:8080/api/events/market"
 
 curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=20&type=logistics"
 curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=auto"
@@ -124,6 +128,14 @@ Expected behavior:
 - Archive-Logistics daily settlement callbacks are stored idempotently and do not mutate manufacturing source data.
 - Enabled downstream services receive published events automatically or through the manual publish commands above.
 - Disabled external services are reported as `DISABLED`; Nexus remains `HEALTHY`.
+
+Market inbound smoke (archive-mock traffic):
+
+```powershell
+curl.exe -X POST "http://localhost:8080/api/events/market" -H "Content-Type: application/json" -d "{\"eventId\":\"MK-ORDER-001\",\"idempotencyKey\":\"K-001\",\"source\":\"Archive-Market\",\"eventType\":\"MARKET_ORDER_PLACED\",\"schemaVersion\":1,\"occurredAt\":\"2026-07-10T00:00:00Z\",\"simulationRunId\":\"SIM-001\",\"settlementCycleId\":\"CYCLE-001\",\"correlationId\":\"CORR-001\",\"causationId\":\"CAUSE-001\",\"hopCount\":0,\"maxHop\":8,\"payload\":{\"orderId\":\"ORD-001\",\"customerId\":\"CUST-001\",\"customerType\":\"CONSUMER\",\"productType\":\"BATTERY_PACK\",\"quantity\":10,\"orderAmount\":1200000,\"priority\":\"NORMAL\",\"requiresShipment\":true}}"
+curl.exe -X POST "http://localhost:8080/api/events/market" -H "Content-Type: application/json" -d "{\"eventId\":\"MK-PROD-001\",\"idempotencyKey\":\"K-002\",\"source\":\"Archive-Market\",\"eventType\":\"PRODUCTION_REQUESTED\",\"schemaVersion\":1,\"occurredAt\":\"2026-07-10T00:00:00Z\",\"simulationRunId\":\"SIM-001\",\"settlementCycleId\":\"CYCLE-001\",\"correlationId\":\"CORR-001\",\"causationId\":\"CAUSE-002\",\"hopCount\":0,\"maxHop\":8,\"payload\":{\"orderId\":\"ORD-001\",\"customerId\":\"CUST-001\",\"customerType\":\"CONSUMER\",\"riskLevel\":\"LOW\",\"productType\":\"BATTERY_PACK\",\"quantity\":10,\"orderAmount\":1200000,\"priority\":\"NORMAL\",\"requiresShipment\":true}}"
+curl.exe -X POST "http://localhost:8080/api/events/market" -H "Content-Type: application/json" -d "{\"eventId\":\"MK-SHIP-001\",\"idempotencyKey\":\"K-003\",\"source\":\"Archive-Market\",\"eventType\":\"SHIPMENT_REQUESTED\",\"schemaVersion\":1,\"occurredAt\":\"2026-07-10T00:00:00Z\",\"simulationRunId\":\"SIM-001\",\"settlementCycleId\":\"CYCLE-001\",\"correlationId\":\"CORR-001\",\"causationId\":\"CAUSE-003\",\"hopCount\":0,\"maxHop\":8,\"payload\":{\"shipmentId\":\"SHIP-001\",\"orderId\":\"ORD-001\",\"originCode\":\"FAC-A\",\"destinationCode\":\"DC-SEOUL-01\",\"requiresShipment\":true,\"priority\":\"HIGH\",\"itemType\":\"battery-module\",\"quantity\":5}}"
+```
 
 ## Verification
 
