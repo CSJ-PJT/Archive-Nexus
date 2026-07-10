@@ -2,6 +2,7 @@ package com.archivenexus.backend.web;
 
 import com.archivenexus.backend.runtime.RuntimeEventModels.OperationsSummaryResponse;
 import com.archivenexus.backend.runtime.RuntimeEventModels.RuntimeEventResponse;
+import com.archivenexus.backend.runtime.RuntimeEventModels.RuntimeStatusResponse;
 import com.archivenexus.backend.runtime.RuntimeEventService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,5 +37,10 @@ public class RuntimeEventController {
     @GetMapping("/api/operations/summary")
     OperationsSummaryResponse operationsSummary() {
         return runtimeEvents.operationsSummary();
+    }
+
+    @GetMapping("/api/runtime/status")
+    RuntimeStatusResponse runtimeStatus() {
+        return runtimeEvents.runtimeStatus();
     }
 }

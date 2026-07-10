@@ -39,6 +39,7 @@ public final class RuntimeEventModels {
             OutboxOperationsSummary outbox,
             EconomyOperationsSummary economy,
             WorkforceOperationsSummary workforce,
+            RuntimeStatusResponse runtime,
             String degradedReason,
             boolean liveFlowAvailable,
             List<String> readOnlyApis,
@@ -69,6 +70,21 @@ public final class RuntimeEventModels {
             Integer backlog,
             BigDecimal productivityRate,
             String bottleneckRole
+    ) {
+    }
+
+    public record RuntimeStatusResponse(
+            String service,
+            boolean runtimeActive,
+            boolean autoRunEnabled,
+            String schedulerStatus,
+            Instant lastWorkAt,
+            Instant lastEventAt,
+            int eventsProducedLastTick,
+            int eventsConsumedLastTick,
+            int backlogCount,
+            String pipelineStatus,
+            Instant generatedAt
     ) {
     }
 }

@@ -41,6 +41,18 @@ GET /api/operations/summary
     "productivityRate": 0.86,
     "bottleneckRole": "QUALITY_INSPECTOR"
   },
+  "runtime": {
+    "service": "Archive-Nexus",
+    "runtimeActive": true,
+    "autoRunEnabled": true,
+    "schedulerStatus": "IDLE",
+    "lastWorkAt": "2026-07-10T00:00:00Z",
+    "lastEventAt": "2026-07-10T00:00:00Z",
+    "eventsProducedLastTick": 3,
+    "eventsConsumedLastTick": 3,
+    "backlogCount": 15,
+    "pipelineStatus": "LIVE"
+  },
   "degradedReason": null,
   "liveFlowAvailable": true,
   "readOnlyApis": [
@@ -73,6 +85,22 @@ ArchiveOS 장애 여부는 Nexus 운영 상태를 바꾸지 않는다. ArchiveOS
 | `marketOriginEvents` | `nexus_market_event` 수신 건수 |
 | `latestEventAt` | 최신 runtime event projection 시각 |
 | `liveFlowAvailable` | Runtime event API 사용 가능 여부 |
+
+## runtime 필드
+
+`runtime` 객체는 Autonomous Runtime Work Loop 상태를 나타낸다.
+
+| 필드 | 설명 |
+| --- | --- |
+| `runtimeActive` | runtime loop가 활성 상태인지 여부 |
+| `autoRunEnabled` | 자동 tick 설정 여부 |
+| `schedulerStatus` | `DISABLED`, `IDLE`, `RUNNING`, `LOCKED`, `FAILED` |
+| `lastWorkAt` | 마지막 synthetic work tick 실행 시각 |
+| `lastEventAt` | 마지막 synthetic runtime event 발생 시각 |
+| `eventsProducedLastTick` | 마지막 tick에서 신규 생성된 synthetic event 수 |
+| `eventsConsumedLastTick` | 마지막 tick에서 처리된 synthetic event 수 |
+| `backlogCount` | workforce/outbox 기준 현재 backlog projection |
+| `pipelineStatus` | `LIVE`, `DISABLED`, `DEGRADED` |
 
 `productionBacklog`와 `workforce.backlog`는 ArchiveOS Live Flow용 현재 운영 projection이다. Nexus에 누적된 전체 production/inspection/maintenance 이력 row 수를 그대로 backlog로 사용하지 않는다. workday snapshot이 아직 없으면 role별 bounded synthetic demand와 capacity gap으로 계산한다.
 

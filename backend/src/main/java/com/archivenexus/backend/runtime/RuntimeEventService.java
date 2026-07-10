@@ -40,6 +40,7 @@ public class RuntimeEventService {
     private final WorkforceAllocationRepository workforceAllocations;
     private final WorkdayResultRepository workdayResults;
     private final WorkforceService workforce;
+    private final RuntimeWorkLoopService runtimeWorkLoop;
     private final ObjectMapper mapper;
 
     public RuntimeEventService(OutboxEventService outbox,
@@ -47,12 +48,14 @@ public class RuntimeEventService {
                                WorkforceAllocationRepository workforceAllocations,
                                WorkdayResultRepository workdayResults,
                                WorkforceService workforce,
+                               RuntimeWorkLoopService runtimeWorkLoop,
                                ObjectMapper mapper) {
         this.outbox = outbox;
         this.marketEvents = marketEvents;
         this.workforceAllocations = workforceAllocations;
         this.workdayResults = workdayResults;
         this.workforce = workforce;
+        this.runtimeWorkLoop = runtimeWorkLoop;
         this.mapper = mapper;
     }
 
@@ -163,6 +166,7 @@ public class RuntimeEventService {
                         workforceSummary.productivityRate(),
                         workforceSummary.bottleneckRole()
                 ),
+                runtimeWorkLoop.status(),
                 degradedReason,
                 true,
                 List.of(
@@ -172,12 +176,17 @@ public class RuntimeEventService {
                         "/api/workforce/summary",
                         "/api/productivity/summary",
                         "/api/capacity/summary",
+                        "/api/runtime/status",
                         "/api/outbox/summary",
                         "/api/integrations/summary",
                         "/api/operations/summary"
                 ),
                 Instant.now()
         );
+    }
+
+    public RuntimeStatusResponse runtimeStatus() {
+        return runtimeWorkLoop.status();
     }
 
     private RuntimeEventResponse fromOutbox(OutboxEventResponse event) {

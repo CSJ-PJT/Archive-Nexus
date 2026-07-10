@@ -56,6 +56,12 @@ archive-nexus:
     state-file: data/archive-nexus-state.json
 
 archive:
+  runtime:
+    autorun:
+      enabled: ${ARCHIVE_RUNTIME_AUTORUN_ENABLED:false}
+    tick-interval: ${ARCHIVE_RUNTIME_TICK_INTERVAL:30s}
+    max-events-per-tick: ${ARCHIVE_RUNTIME_MAX_EVENTS_PER_TICK:10}
+    max-backlog-per-tick: ${ARCHIVE_RUNTIME_MAX_BACKLOG_PER_TICK:50}
   workforce:
     enabled: ${ARCHIVE_WORKFORCE_ENABLED:false}
     baseline-capacity: ${ARCHIVE_WORKFORCE_BASELINE_CAPACITY:120}

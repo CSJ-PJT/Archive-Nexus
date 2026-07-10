@@ -83,3 +83,21 @@ Archive-Nexus MVP 매핑:
 - workforce summary API
 
 별도 random/fake animation 데이터를 생성하지 않는다.
+
+## Autonomous runtime work loop
+
+`archive.runtime.autorun.enabled=true`이면 Archive-Nexus는 제한된 주기로 synthetic Market-origin work를 생성한다.
+
+- `MARKET_ORDER_PLACED`
+- `PRODUCTION_REQUESTED`
+- `SHIPMENT_REQUESTED`
+
+이 이벤트는 화면용 fake animation이 아니라 기존 Market inbound, Workforce capacity, Outbox routing 경로를 통과하는 Synthetic Runtime Data다.
+
+상태 API:
+
+```http
+GET /api/runtime/status
+```
+
+루프 상태는 `/api/runtime/status`와 `/api/operations/summary.runtime`에서 확인한다.
