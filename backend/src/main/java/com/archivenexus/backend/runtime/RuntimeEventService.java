@@ -8,6 +8,10 @@ import com.archivenexus.backend.outbox.OutboxModels.OutboxEventResponse;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxStatus;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxSummary;
 import com.archivenexus.backend.runtime.RuntimeEventModels.*;
+import com.archivenexus.backend.workforce.WorkdayResultEntity;
+import com.archivenexus.backend.workforce.WorkdayResultRepository;
+import com.archivenexus.backend.workforce.WorkforceAllocationEntity;
+import com.archivenexus.backend.workforce.WorkforceAllocationRepository;
 import com.archivenexus.backend.workforce.WorkforceModels.WorkforceSummary;
 import com.archivenexus.backend.workforce.WorkforceService;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -33,15 +37,21 @@ public class RuntimeEventService {
 
     private final OutboxEventService outbox;
     private final MarketInboundEventRepository marketEvents;
+    private final WorkforceAllocationRepository workforceAllocations;
+    private final WorkdayResultRepository workdayResults;
     private final WorkforceService workforce;
     private final ObjectMapper mapper;
 
     public RuntimeEventService(OutboxEventService outbox,
                                MarketInboundEventRepository marketEvents,
+                               WorkforceAllocationRepository workforceAllocations,
+                               WorkdayResultRepository workdayResults,
                                WorkforceService workforce,
                                ObjectMapper mapper) {
         this.outbox = outbox;
         this.marketEvents = marketEvents;
+        this.workforceAllocations = workforceAllocations;
+        this.workdayResults = workdayResults;
         this.workforce = workforce;
         this.mapper = mapper;
     }
@@ -53,7 +63,13 @@ public class RuntimeEventService {
                 .map(this::fromOutbox)
                 .forEach(events::add);
         marketEvents.findAllByOrderByReceivedAtDesc(PageRequest.of(0, Math.min(1000, Math.max(safeLimit, 100)))).stream()
-                .map(this::fromMarket)
+                .flatMap(event -> fromMarket(event).stream())
+                .forEach(events::add);
+        workforceAllocations.findAllByOrderByCreatedAtDesc(PageRequest.of(0, Math.min(500, Math.max(safeLimit, 100)))).stream()
+                .map(this::fromWorkforceAllocation)
+                .forEach(events::add);
+        workdayResults.findAllByOrderByCreatedAtDesc(PageRequest.of(0, Math.min(500, Math.max(safeLimit, 100)))).stream()
+                .flatMap(result -> fromWorkday(result).stream())
                 .forEach(events::add);
         return events.stream()
                 .sorted(Comparator.comparing(RuntimeEventResponse::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
@@ -68,11 +84,14 @@ public class RuntimeEventService {
         String safeCorrelationId = correlationId.trim();
         List<RuntimeEventResponse> events = new ArrayList<>();
         marketEvents.findAllByCorrelationIdOrderByReceivedAtDesc(safeCorrelationId, PageRequest.of(0, 500)).stream()
-                .map(this::fromMarket)
+                .flatMap(event -> fromMarket(event).stream())
                 .forEach(events::add);
         outbox.events(1000).stream()
                 .filter(event -> safeCorrelationId.equals(text(event.payload().get("correlationId"))))
                 .map(this::fromOutbox)
+                .forEach(events::add);
+        workforceAllocations.findAllByCorrelationIdOrderByCreatedAtDesc(safeCorrelationId, PageRequest.of(0, 500)).stream()
+                .map(this::fromWorkforceAllocation)
                 .forEach(events::add);
         return events.stream()
                 .sorted(Comparator.comparing(RuntimeEventResponse::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
@@ -91,7 +110,15 @@ public class RuntimeEventService {
                 .forEach(events::add);
         marketEvents.findAllByOrderByReceivedAtDesc(PageRequest.of(0, 1000)).stream()
                 .filter(event -> safeEntityId.equals(entityIdFromPayload(read(event.payloadJson()))))
-                .map(this::fromMarket)
+                .flatMap(event -> fromMarket(event).stream())
+                .forEach(events::add);
+        workforceAllocations.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 1000)).stream()
+                .filter(event -> safeEntityId.equals(event.allocationId()) || safeEntityId.equals(event.workdayId()))
+                .map(this::fromWorkforceAllocation)
+                .forEach(events::add);
+        workdayResults.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 1000)).stream()
+                .filter(result -> safeEntityId.equals(result.workdayId()))
+                .flatMap(result -> fromWorkday(result).stream())
                 .forEach(events::add);
         return events.stream()
                 .sorted(Comparator.comparing(RuntimeEventResponse::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
@@ -101,6 +128,10 @@ public class RuntimeEventService {
     public OperationsSummaryResponse operationsSummary() {
         OutboxSummary outboxSummary = outbox.summary();
         WorkforceSummary workforceSummary = workforce.workforceSummary();
+        WorkdayResultEntity latestWorkday = workdayResults.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 1))
+                .stream()
+                .findFirst()
+                .orElse(null);
         Instant latestEventAt = recent(1).stream()
                 .map(RuntimeEventResponse::occurredAt)
                 .filter(Objects::nonNull)
@@ -117,6 +148,11 @@ public class RuntimeEventService {
                 SERVICE_ROLE,
                 status,
                 latestEventAt,
+                latestWorkday == null ? 0 : latestWorkday.productionRequested(),
+                latestWorkday == null ? 0 : latestWorkday.productionCompleted(),
+                latestWorkday == null ? workforceSummary.backlog() : latestWorkday.productionBacklog(),
+                latestWorkday == null ? 0 : latestWorkday.qualityDefects(),
+                marketEvents.count(),
                 new OutboxOperationsSummary(outboxSummary.pending(), outboxSummary.published(), failed, retry),
                 new EconomyOperationsSummary(BigDecimal.ZERO, workforceSummary.payrollCost(), BigDecimal.ZERO.subtract(workforceSummary.payrollCost()), "SYNTHETIC_WORKFORCE_COST_ONLY"),
                 new WorkforceOperationsSummary(
@@ -149,7 +185,7 @@ public class RuntimeEventService {
         String entityId = text(event.aggregateId(), entityIdFromPayload(payload));
         return new RuntimeEventResponse(
                 event.eventId(),
-                text(event.source(), SERVICE_NAME),
+                SERVICE_NAME,
                 domainForOutbox(event),
                 event.eventType().name(),
                 entityTypeForAggregate(event.aggregateType()),
@@ -164,30 +200,134 @@ public class RuntimeEventService {
         );
     }
 
-    private RuntimeEventResponse fromMarket(MarketInboundEventEntity event) {
+    private List<RuntimeEventResponse> fromMarket(MarketInboundEventEntity event) {
         Map<String, Object> payload = read(event.payloadJson());
         String entityId = entityIdFromPayload(payload);
-        return new RuntimeEventResponse(
+        String projectedEventType = switch (event.eventType()) {
+            case MARKET_ORDER_PLACED -> "MARKET_ORDER_RECEIVED";
+            default -> event.eventType().name();
+        };
+        List<RuntimeEventResponse> projections = new ArrayList<>();
+        projections.add(new RuntimeEventResponse(
                 event.eventId(),
                 text(event.source(), "Archive-Market"),
                 "market",
-                event.eventType().name(),
+                projectedEventType,
                 entityTypeForMarket(event.eventType().name()),
                 entityId,
                 event.correlationId(),
                 event.causationId(),
                 statusForMarket(event.processingStatus()),
                 severityForMarket(event.processingStatus(), payload),
-                "Market event " + event.eventType().name() + " was " + event.processingStatus().name().toLowerCase(),
+                projectedEventType + " was " + event.processingStatus().name().toLowerCase(),
                 event.occurredAt(),
                 metadataForMarket(event, payload)
+        ));
+        if ("PRODUCTION_REQUESTED".equals(event.eventType().name()) && event.processingStatus() == MarketEventStatus.PROCESSED) {
+            projections.add(new RuntimeEventResponse(
+                    event.eventId() + ":PRODUCTION_STARTED",
+                    SERVICE_NAME,
+                    "production",
+                    "PRODUCTION_STARTED",
+                    "production-order",
+                    entityId,
+                    event.correlationId(),
+                    event.causationId(),
+                    "moving",
+                    "info",
+                    "Production started from Market request",
+                    event.occurredAt() == null ? event.receivedAt() : event.occurredAt().plusMillis(1),
+                    metadataForMarket(event, payload)
+            ));
+        }
+        return projections;
+    }
+
+    private RuntimeEventResponse fromWorkforceAllocation(WorkforceAllocationEntity event) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        put(metadata, "allocationId", event.allocationId());
+        put(metadata, "role", event.roleType());
+        put(metadata, "allocatedHeadcount", event.allocatedHeadcount());
+        put(metadata, "effectiveCapacity", event.effectiveCapacity());
+        put(metadata, "usedCapacity", event.usedCapacity());
+        put(metadata, "remainingCapacity", event.remainingCapacity());
+        put(metadata, "workdayId", event.workdayId());
+        put(metadata, "simulationRunId", event.simulationRunId());
+        put(metadata, "settlementCycleId", event.settlementCycleId());
+        put(metadata, "reason", event.reason());
+        boolean active = "ACTIVE".equals(event.status().name());
+        return new RuntimeEventResponse(
+                event.eventId(),
+                text(event.sourceService(), SERVICE_NAME),
+                "workforce",
+                "WORKFORCE_ALLOCATION_ASSIGNED",
+                "workforce-allocation",
+                event.allocationId(),
+                event.correlationId(),
+                event.causationId(),
+                active ? "completed" : "rejected",
+                active ? "info" : "warning",
+                "Workforce allocation assigned to " + event.roleType(),
+                event.createdAt(),
+                metadata
         );
+    }
+
+    private List<RuntimeEventResponse> fromWorkday(WorkdayResultEntity result) {
+        Map<String, Object> evidence = read(result.evidenceJson());
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        put(metadata, "workDate", result.workDate());
+        put(metadata, "totalCapacity", result.totalCapacity());
+        put(metadata, "usedCapacity", result.usedCapacity());
+        put(metadata, "remainingCapacity", result.remainingCapacity());
+        put(metadata, "productionRequested", result.productionRequested());
+        put(metadata, "productionCompleted", result.productionCompleted());
+        put(metadata, "productionBacklog", result.productionBacklog());
+        put(metadata, "qualityDefects", result.qualityDefects());
+        put(metadata, "maintenanceCompleted", result.maintenanceCompleted());
+        put(metadata, "productivityScore", result.productivityScore());
+        put(metadata, "bottleneckRole", result.bottleneckRole());
+        List<RuntimeEventResponse> projections = new ArrayList<>();
+        projections.add(new RuntimeEventResponse(
+                result.workdayId() + ":WORKDAY_COMPLETED",
+                SERVICE_NAME,
+                "workforce",
+                "WORKDAY_COMPLETED",
+                "workday",
+                result.workdayId(),
+                text(evidence.get("correlationId")),
+                text(evidence.get("causationId")),
+                "completed",
+                result.productionBacklog() > 0 ? "warning" : "info",
+                "Workday completed with " + result.productionCompleted() + " production units",
+                result.createdAt(),
+                metadata
+        ));
+        if (result.productionBacklog() > 0) {
+            projections.add(new RuntimeEventResponse(
+                    result.workdayId() + ":CAPACITY_SHORTAGE_DETECTED",
+                    SERVICE_NAME,
+                    "workforce",
+                    "CAPACITY_SHORTAGE_DETECTED",
+                    "workday",
+                    result.workdayId(),
+                    text(evidence.get("correlationId")),
+                    text(evidence.get("causationId")),
+                    "delayed",
+                    "warning",
+                    "Capacity shortage detected at " + result.bottleneckRole(),
+                    result.createdAt().plusMillis(1),
+                    metadata
+            ));
+        }
+        return projections;
     }
 
     private Map<String, Object> metadataForOutbox(OutboxEventResponse event, Map<String, Object> payload) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         put(metadata, "aggregateType", event.aggregateType());
         put(metadata, "aggregateId", event.aggregateId());
+        put(metadata, "originSourceService", event.source());
         put(metadata, "targetService", event.targetService() == null ? null : event.targetService().name());
         put(metadata, "retryCount", event.retryCount());
         put(metadata, "lastError", event.lastError());

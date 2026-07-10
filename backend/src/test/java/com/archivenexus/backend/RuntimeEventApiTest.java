@@ -9,6 +9,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -92,11 +94,113 @@ class RuntimeEventApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.serviceName").value("Archive-Nexus"))
                 .andExpect(jsonPath("$.status").exists())
+                .andExpect(jsonPath("$.productionRequested").exists())
+                .andExpect(jsonPath("$.productionCompleted").exists())
+                .andExpect(jsonPath("$.productionBacklog").exists())
+                .andExpect(jsonPath("$.qualityDefects").exists())
+                .andExpect(jsonPath("$.marketOriginEvents").exists())
                 .andExpect(jsonPath("$.outbox.pending").exists())
                 .andExpect(jsonPath("$.outbox.published").exists())
                 .andExpect(jsonPath("$.outbox.failed").exists())
                 .andExpect(jsonPath("$.outbox.retry").exists())
                 .andExpect(jsonPath("$.workforce.totalHeadcount").exists())
+                .andExpect(jsonPath("$.workforce.effectiveCapacity").exists())
+                .andExpect(jsonPath("$.workforce.usedCapacity").exists())
+                .andExpect(jsonPath("$.workforce.bottleneckRole").exists())
                 .andExpect(jsonPath("$.liveFlowAvailable").value(true));
+    }
+
+    @Test
+    void projectsMarketOrderProductionWorkforceAndWorkdayEvents() throws Exception {
+        mvc.perform(post("/api/events/market")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "eventId": "runtime-order-001",
+                                  "idempotencyKey": "runtime-order-001",
+                                  "source": "Archive-Market",
+                                  "eventType": "MARKET_ORDER_PLACED",
+                                  "schemaVersion": 1,
+                                  "occurredAt": "2026-07-10T01:00:00Z",
+                                  "simulationRunId": "SIM-RUNTIME",
+                                  "settlementCycleId": "CYCLE-RUNTIME",
+                                  "correlationId": "CORR-RUNTIME-ORDER",
+                                  "causationId": "CAUSE-RUNTIME-ORDER",
+                                  "hopCount": 0,
+                                  "maxHop": 8,
+                                  "payload": {
+                                    "orderId": "ORD-RUNTIME-ORDER",
+                                    "customerType": "B2B",
+                                    "productType": "BATTERY_PACK",
+                                    "quantity": 12,
+                                    "orderAmount": 1200000,
+                                    "priority": "NORMAL",
+                                    "requiresShipment": true
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/events/market")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "eventId": "runtime-prod-001",
+                                  "idempotencyKey": "runtime-prod-001",
+                                  "source": "Archive-Market",
+                                  "eventType": "PRODUCTION_REQUESTED",
+                                  "schemaVersion": 1,
+                                  "occurredAt": "2026-07-10T01:01:00Z",
+                                  "simulationRunId": "SIM-RUNTIME",
+                                  "settlementCycleId": "CYCLE-RUNTIME",
+                                  "correlationId": "CORR-RUNTIME-PROD",
+                                  "causationId": "CAUSE-RUNTIME-PROD",
+                                  "hopCount": 0,
+                                  "maxHop": 8,
+                                  "payload": {
+                                    "orderId": "ORD-RUNTIME-PROD",
+                                    "customerType": "B2B",
+                                    "productType": "BATTERY_PACK",
+                                    "quantity": 12,
+                                    "orderAmount": 1200000,
+                                    "priority": "HIGH",
+                                    "requiresShipment": true
+                                  }
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/workforce/allocations")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "eventId": "runtime-workforce-001",
+                                  "idempotencyKey": "runtime-workforce-001",
+                                  "sourceService": "ArchiveOS",
+                                  "eventType": "WORKFORCE_ALLOCATION_ASSIGNED",
+                                  "role": "PRODUCTION_OPERATOR",
+                                  "allocatedHeadcount": 2,
+                                  "capacityPerPersonPerDay": 10,
+                                  "productivityScore": 1.0,
+                                  "wagePerDay": 100000,
+                                  "workdayId": "NEXUS-WORKDAY-2026-07-10",
+                                  "correlationId": "CORR-RUNTIME-WF",
+                                  "causationId": "CAUSE-RUNTIME-WF",
+                                  "hopCount": 0,
+                                  "maxHop": 8
+                                }
+                                """))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/workforce/workday/run").param("date", "2026-07-10"))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/runtime-events/recent").param("limit", "100"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.eventType=='MARKET_ORDER_RECEIVED')]", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$[?(@.eventType=='PRODUCTION_REQUESTED')]", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$[?(@.eventType=='PRODUCTION_STARTED')]", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$[?(@.eventType=='WORKFORCE_ALLOCATION_ASSIGNED')]", hasSize(greaterThanOrEqualTo(1))))
+                .andExpect(jsonPath("$[?(@.eventType=='WORKDAY_COMPLETED')]", hasSize(greaterThanOrEqualTo(1))));
     }
 }

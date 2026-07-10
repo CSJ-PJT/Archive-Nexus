@@ -16,6 +16,11 @@ GET /api/operations/summary
   "serviceRole": "Manufacturing AX runtime, market inbound, workforce capacity, and outbox routing",
   "status": "HEALTHY",
   "latestEventAt": "2026-07-10T00:00:00Z",
+  "productionRequested": 120,
+  "productionCompleted": 100,
+  "productionBacklog": 20,
+  "qualityDefects": 3,
+  "marketOriginEvents": 42,
   "outbox": {
     "pending": 12,
     "published": 80,
@@ -56,6 +61,18 @@ GET /api/operations/summary
 | Outbox `PENDING_RETRY` 존재 | `DEGRADED` |
 
 ArchiveOS 장애 여부는 Nexus 운영 상태를 바꾸지 않는다. ArchiveOS가 down이어도 이 API는 Nexus 내부 상태를 기준으로 응답한다.
+
+## 생산/품질/Market-origin 필드
+
+| 필드 | 원천 |
+| --- | --- |
+| `productionRequested` | 최신 `nexus_workday_result.production_requested` |
+| `productionCompleted` | 최신 `nexus_workday_result.production_completed` |
+| `productionBacklog` | 최신 `nexus_workday_result.production_backlog`, 없으면 workforce backlog |
+| `qualityDefects` | 최신 `nexus_workday_result.quality_defects` |
+| `marketOriginEvents` | `nexus_market_event` 수신 건수 |
+| `latestEventAt` | 최신 runtime event projection 시각 |
+| `liveFlowAvailable` | Runtime event API 사용 가능 여부 |
 
 ## economy 필드
 

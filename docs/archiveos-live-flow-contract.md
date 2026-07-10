@@ -18,6 +18,24 @@ ArchiveOS Live Flow / Operational Twin은 Archive-Nexus의 실제 runtime 데이
 | `GET /api/productivity/summary` | 생산성 요약 |
 | `GET /api/capacity/summary` | capacity 요약 |
 
+## Nexus 주요 runtime event
+
+Archive-Nexus는 다음 runtime event를 projection으로 노출한다.
+
+- `MARKET_ORDER_RECEIVED`
+- `PRODUCTION_REQUESTED`
+- `PRODUCTION_STARTED`
+- `PRODUCTION_COMPLETED`
+- `PRODUCTION_DELAYED`
+- `QUALITY_DEFECT_DETECTED`
+- `MAINTENANCE_COMPLETED`
+- `MATERIAL_CONSUMED`
+- `LOGISTICS_DISPATCHED`
+- `WORKFORCE_ALLOCATION_ASSIGNED`
+- `WORKDAY_COMPLETED`
+- `CAPACITY_SHORTAGE_DETECTED`
+- `BACKLOG_INCREASED`
+
 ## 장애 격리
 
 - ArchiveOS가 꺼져 있어도 Nexus는 정상 동작한다.
