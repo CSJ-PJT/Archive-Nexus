@@ -79,11 +79,12 @@ POST /api/workforce/workday/run?date=YYYY-MM-DD
 
 Workforce data is synthetic operational capacity data. It must not contain real employee names, payroll data, or personal data.
 
-`POST /api/workforce/allocations` accepts allocation events from `ArchiveOS` or `Archive-Market` and supports `PRODUCTION`, `QUALITY`, and `MAINTENANCE` roles.
+`POST /api/workforce/allocations` accepts allocation events from `ArchiveOS` or `Archive-Market` and supports `PRODUCTION_OPERATOR`, `QUALITY_INSPECTOR`, `MAINTENANCE_ENGINEER`, `MATERIAL_HANDLER`, and `FACTORY_MANAGER` roles.
 
 Guard behavior:
 
 - duplicate `eventId` or `idempotencyKey` returns `duplicate=true`;
+- duplicate `workdayId + role` is treated as an existing allocation;
 - `hopCount > maxHop` returns `REJECTED`;
 - `ARCHIVE_WORKFORCE_ENABLED=false` keeps baseline capacity behavior.
 

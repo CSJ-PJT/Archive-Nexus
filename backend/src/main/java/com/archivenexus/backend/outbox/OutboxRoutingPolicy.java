@@ -47,9 +47,12 @@ public class OutboxRoutingPolicy {
             return new OutboxTarget(OutboxTargetService.LEDGER, RoutingStatus.ROUTED,
                     "cost/settlement event can be normalized by Archive-Ledger directly");
         }
-        if (eventType == EventType.SHIPMENT_HOLD_CREATED) {
+        if (eventType == EventType.SHIPMENT_HOLD_CREATED
+                || eventType == EventType.PRODUCTION_DELAYED
+                || eventType == EventType.BACKLOG_INCREASED
+                || eventType == EventType.MAINTENANCE_REQUIRED) {
             return new OutboxTarget(OutboxTargetService.NONE, RoutingStatus.ROUTE_SKIPPED,
-                    "shipment hold creation is operational state, not a confirmed logistics cost event");
+                    "operational state event is not a confirmed external cost event");
         }
         return new OutboxTarget(OutboxTargetService.UNKNOWN, RoutingStatus.ROUTE_FAILED,
                 "unknown outbox routing target for eventType=" + eventType);

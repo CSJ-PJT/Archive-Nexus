@@ -3,6 +3,7 @@ package com.archivenexus.backend.market;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxEventResponse;
 import com.archivenexus.backend.outbox.OutboxModels.EventType;
 import com.archivenexus.backend.outbox.OutboxEventService;
+import com.archivenexus.backend.workforce.WorkforceService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -26,11 +27,14 @@ public class MarketEventService {
 
     private final MarketInboundEventRepository repository;
     private final OutboxEventService outbox;
+    private final WorkforceService workforce;
     private final ObjectMapper mapper;
 
-    public MarketEventService(MarketInboundEventRepository repository, OutboxEventService outbox, ObjectMapper mapper) {
+    public MarketEventService(MarketInboundEventRepository repository, OutboxEventService outbox,
+                              WorkforceService workforce, ObjectMapper mapper) {
         this.repository = repository;
         this.outbox = outbox;
+        this.workforce = workforce;
         this.mapper = mapper;
     }
 
@@ -223,15 +227,19 @@ public class MarketEventService {
     private List<OutboxEventResponse> emitOutboxEvents(MarketInboundEventRequest header, Map<String, Object> payload) {
         Map<String, Object> safePayload = payload == null ? Map.of() : payload;
         return switch (header.eventType()) {
-            case PRODUCTION_REQUESTED -> List.of(
-                    emit(EventType.PRODUCTION_COMPLETED,
+            case PRODUCTION_REQUESTED -> {
+                WorkforceService.ProductionCapacityDecision decision = workforce.processProductionRequest(safePayload);
+                Map<String, Object> mappedPayload = new LinkedHashMap<>(safePayload);
+                mappedPayload.putAll(decision.workforcePayload());
+                yield List.of(
+                    emit(decision.eventType(),
                             header,
-                            payload,
-                            textOrDefault(safePayload.get("orderId") == null ? null : safePayload.get("orderId").toString(),
-                                    header.eventId()),
+                            mappedPayload,
+                            decision.aggregateId(),
                             "ProductionOrder"
                     )
-            );
+                );
+            }
             case SHIPMENT_REQUESTED -> shipmentOutbox(header, safePayload);
             case ORDER_CANCELLED -> List.of(
                     emit(EventType.SHIPMENT_HOLD_CREATED,
@@ -361,6 +369,18 @@ public class MarketEventService {
             merged.put("requiresShipment", payload.get("requiresShipment"));
             merged.put("returnId", payload.get("returnId"));
             merged.put("claimId", payload.get("claimId"));
+            merged.put("workdayId", payload.get("workdayId"));
+            merged.put("workforceAllocationId", payload.get("workforceAllocationId"));
+            merged.put("productivityScore", payload.get("productivityScore"));
+            merged.put("usedCapacity", payload.get("usedCapacity"));
+            merged.put("remainingCapacity", payload.get("remainingCapacity"));
+            merged.put("backlogCount", payload.get("backlogCount"));
+            merged.put("bottleneckRole", payload.get("bottleneckRole"));
+            merged.put("productionRequested", payload.get("productionRequested"));
+            merged.put("productionCompleted", payload.get("productionCompleted"));
+            merged.put("payrollCost", payload.get("payrollCost"));
+            merged.put("qualityRiskIncreased", payload.get("qualityRiskIncreased"));
+            merged.put("maintenanceRiskIncreased", payload.get("maintenanceRiskIncreased"));
         }
 
         merged.put("marketPayload", payload == null ? Map.of() : payload);

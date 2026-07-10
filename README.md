@@ -183,6 +183,9 @@ curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger"
 - [Outbox routing](docs/outbox-routing.md)
 - [API reference](docs/api-reference.md)
 - [Operational workforce](docs/operational-workforce.md)
+- [Nexus workforce model](docs/nexus-workforce-model.md)
+- [Nexus productivity model](docs/nexus-productivity-model.md)
+- [Workforce event contract](docs/workforce-event-contract.md)
 - [Smoke test](docs/smoke-test.md)
 - [Operations runbook](docs/operations-runbook.md)
 

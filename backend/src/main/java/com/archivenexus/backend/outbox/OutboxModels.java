@@ -3,6 +3,7 @@ package com.archivenexus.backend.outbox;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import com.archivenexus.backend.workforce.WorkforceModels.WorkforceSummary;
 
 public final class OutboxModels {
     private OutboxModels() {
@@ -10,6 +11,8 @@ public final class OutboxModels {
 
     public enum EventType {
         PRODUCTION_COMPLETED,
+        PRODUCTION_DELAYED,
+        BACKLOG_INCREASED,
         MATERIAL_CONSUMED,
         LOGISTICS_DISPATCHED,
         URGENT_DELIVERY_REQUESTED,
@@ -17,6 +20,7 @@ public final class OutboxModels {
         MATERIAL_TRANSFER_REQUESTED,
         QUALITY_REPLACEMENT_SHIPMENT,
         MAINTENANCE_COMPLETED,
+        MAINTENANCE_REQUIRED,
         QUALITY_DEFECT_DETECTED,
         EMERGENCY_PURCHASE_REQUESTED,
         QUALITY_CLAIM_CHARGED,
@@ -138,7 +142,8 @@ public final class OutboxModels {
             long marketEventsReceived,
             long marketEventsProcessed,
             long marketEventsFailed,
-            long marketOriginOutboxEvents
+            long marketOriginOutboxEvents,
+            WorkforceSummary workforce
     ) {
     }
 

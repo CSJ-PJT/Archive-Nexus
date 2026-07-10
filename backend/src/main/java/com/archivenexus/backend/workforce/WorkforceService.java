@@ -1,5 +1,6 @@
 package com.archivenexus.backend.workforce;
 
+import com.archivenexus.backend.outbox.OutboxModels.EventType;
 import com.archivenexus.backend.service.NexusStateService;
 import com.archivenexus.backend.workforce.WorkforceModels.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,20 +24,20 @@ public class WorkforceService {
     private static final List<String> ALLOWED_SOURCES = List.of("Archive-Market", "ArchiveOS");
 
     private final WorkforceAllocationRepository allocations;
-    private final WorkdayProductivityRepository workdays;
+    private final WorkdayResultRepository workdayResults;
     private final NexusStateService nexus;
     private final ObjectMapper mapper;
     private final boolean enabled;
     private final int baselineCapacity;
 
     public WorkforceService(WorkforceAllocationRepository allocations,
-                            WorkdayProductivityRepository workdays,
+                            WorkdayResultRepository workdayResults,
                             NexusStateService nexus,
                             ObjectMapper mapper,
                             @Value("${archive.workforce.enabled:false}") boolean enabled,
                             @Value("${archive.workforce.baseline-capacity:120}") int baselineCapacity) {
         this.allocations = allocations;
-        this.workdays = workdays;
+        this.workdayResults = workdayResults;
         this.nexus = nexus;
         this.mapper = mapper;
         this.enabled = enabled;
@@ -51,21 +52,42 @@ public class WorkforceService {
         if (existing != null) {
             return allocationResponse(existing, true);
         }
+        WorkforceAllocationEntity sameRole = safe.workdayId() == null ? null
+                : allocations.findByWorkdayIdAndRole(safe.workdayId(), safe.role()).orElse(null);
+        if (sameRole != null) {
+            return allocationResponse(sameRole, true);
+        }
 
+        int headcount = Math.max(0, safe.allocatedHeadcount() == null ? safe.assignedUnits() : safe.allocatedHeadcount());
+        int capacityPerPerson = Math.max(0, safe.capacityPerPersonPerDay() == null
+                ? defaultCapacityPerPerson(safe.role())
+                : safe.capacityPerPersonPerDay());
+        BigDecimal productivity = positiveDecimal(safe.productivityScore(), positiveDecimal(safe.skillLevel(), BigDecimal.ONE));
+        BigDecimal wage = positiveDecimal(safe.wagePerDay(), positiveDecimal(safe.costPerUnitKrw(), BigDecimal.ZERO));
+        int effectiveCapacity = effectiveCapacity(headcount, capacityPerPerson, productivity);
         WorkforceAllocationStatus status = safe.hopCount() > safe.maxHop()
                 ? WorkforceAllocationStatus.REJECTED
                 : WorkforceAllocationStatus.ACTIVE;
-        String reason = status == WorkforceAllocationStatus.REJECTED
-                ? "hopCount exceeds maxHop"
-                : safe.reason();
+        String reason = status == WorkforceAllocationStatus.REJECTED ? "hopCount exceeds maxHop" : safe.reason();
+        Instant now = Instant.now();
+
         WorkforceAllocationEntity saved = allocations.save(new WorkforceAllocationEntity(
                 safe.eventId(),
+                text(safe.payload() == null ? null : asString(safe.payload().get("allocationId")), safe.eventId()),
                 safe.idempotencyKey(),
                 safe.sourceService(),
+                SERVICE_NAME,
                 safe.role(),
-                Math.max(0, safe.assignedUnits()),
-                positiveDecimal(safe.skillLevel(), BigDecimal.ONE),
-                positiveDecimal(safe.costPerUnitKrw(), BigDecimal.ZERO),
+                headcount,
+                headcount,
+                capacityPerPerson,
+                productivity,
+                productivity,
+                wage,
+                wage,
+                effectiveCapacity,
+                0,
+                effectiveCapacity,
                 safe.workdayId(),
                 safe.simulationRunId(),
                 safe.settlementCycleId(),
@@ -76,10 +98,41 @@ public class WorkforceService {
                 status,
                 reason,
                 write(safe.payload()),
-                Instant.now(),
-                Instant.now()
+                now,
+                now,
+                now
         ));
         return allocationResponse(saved, false);
+    }
+
+    @Transactional
+    public ProductionCapacityDecision processProductionRequest(Map<String, Object> payload) {
+        int requested = positiveInt(payload.get("quantity"), 1);
+        String orderId = text(asString(payload.get("orderId")), "ORDER-" + UUID.randomUUID());
+        String workdayId = text(asString(payload.get("workdayId")), "NEXUS-WORKDAY-" + LocalDate.now());
+        CapacityUse use = consume(WorkforceRole.PRODUCTION_OPERATOR, requested);
+        int completed = use.used();
+        int backlog = Math.max(0, requested - completed);
+        String bottleneck = backlog > 0 ? WorkforceRole.PRODUCTION_OPERATOR.name() : bottleneckRole();
+        BigDecimal productivity = requested == 0 ? BigDecimal.ONE
+                : BigDecimal.valueOf(completed).divide(BigDecimal.valueOf(requested), 4, RoundingMode.HALF_UP);
+
+        Map<String, Object> workforcePayload = new LinkedHashMap<>();
+        workforcePayload.put("workdayId", workdayId);
+        workforcePayload.put("workforceAllocationId", use.allocationId());
+        workforcePayload.put("productivityScore", productivity);
+        workforcePayload.put("usedCapacity", completed);
+        workforcePayload.put("remainingCapacity", use.remaining());
+        workforcePayload.put("backlogCount", backlog);
+        workforcePayload.put("bottleneckRole", bottleneck);
+        workforcePayload.put("productionRequested", requested);
+        workforcePayload.put("productionCompleted", completed);
+        workforcePayload.put("payrollCost", payrollCost());
+        workforcePayload.put("qualityRiskIncreased", roleRemaining(WorkforceRole.QUALITY_INSPECTOR) < completed);
+        workforcePayload.put("maintenanceRiskIncreased", roleRemaining(WorkforceRole.MAINTENANCE_ENGINEER) <= 0);
+
+        EventType eventType = backlog > 0 ? EventType.BACKLOG_INCREASED : EventType.PRODUCTION_COMPLETED;
+        return new ProductionCapacityDecision(eventType, orderId, requested, completed, backlog, workforcePayload);
     }
 
     public WorkforceSummary workforceSummary() {
@@ -89,17 +142,22 @@ public class WorkforceService {
                 enabled,
                 SERVICE_NAME,
                 baselineCapacity,
-                activeWorkers(WorkforceRole.PRODUCTION),
-                activeWorkers(WorkforceRole.QUALITY),
-                activeWorkers(WorkforceRole.MAINTENANCE),
-                activeAllocations().stream().mapToInt(WorkforceAllocationEntity::assignedUnits).sum(),
-                dailyLaborCost(),
+                activeWorkers(WorkforceRole.PRODUCTION_OPERATOR),
+                activeWorkers(WorkforceRole.QUALITY_INSPECTOR),
+                activeWorkers(WorkforceRole.MAINTENANCE_ENGINEER),
+                activeWorkers(WorkforceRole.MATERIAL_HANDLER),
+                activeWorkers(WorkforceRole.FACTORY_MANAGER),
+                activeAllocations().stream().mapToInt(WorkforceAllocationEntity::allocatedHeadcount).sum(),
+                payrollCost(),
+                payrollCost(),
                 capacity.totalCapacity(),
+                capacity.usedCapacity(),
+                Math.max(0, capacity.totalCapacity() - capacity.usedCapacity()),
                 capacity.demandUnits(),
                 capacity.bottleneckRole(),
                 productivity.lastProductivityRate(),
                 allocations.count(),
-                workdays.count(),
+                workdayResults.count(),
                 Instant.now()
         );
     }
@@ -112,9 +170,12 @@ public class WorkforceService {
                 snapshot.productionCapacity(),
                 snapshot.qualityCapacity(),
                 snapshot.maintenanceCapacity(),
+                snapshot.materialCapacity(),
+                snapshot.managementCapacity(),
                 snapshot.totalCapacity(),
                 snapshot.demandUnits(),
-                Math.max(0, snapshot.totalCapacity() - snapshot.demandUnits()),
+                snapshot.usedCapacity(),
+                Math.max(0, snapshot.totalCapacity() - snapshot.usedCapacity()),
                 Math.max(0, snapshot.demandUnits() - snapshot.totalCapacity()),
                 snapshot.bottleneckRole(),
                 Instant.now()
@@ -122,60 +183,66 @@ public class WorkforceService {
     }
 
     public ProductivitySummary productivitySummary() {
-        List<WorkdayProductivityEntity> recent = workdays.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 50));
+        List<WorkdayResultEntity> recent = workdayResults.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 50));
         if (recent.isEmpty()) {
             return new ProductivitySummary(enabled, 0, demandUnits(), demandUnits(), BigDecimal.ZERO,
-                    BigDecimal.ZERO, BigDecimal.ZERO, bottleneckRole(), 0, Instant.now());
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, bottleneckRole(), 0, Instant.now());
         }
-        WorkdayProductivityEntity last = recent.getFirst();
+        WorkdayResultEntity last = recent.getFirst();
         BigDecimal average = recent.stream()
-                .map(WorkdayProductivityEntity::productivityRate)
+                .map(WorkdayResultEntity::productivityScore)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .divide(BigDecimal.valueOf(recent.size()), 4, RoundingMode.HALF_UP);
-        return new ProductivitySummary(enabled, last.processedUnits(), last.backlogBefore(), last.backlogAfter(),
-                last.productivityRate(), average, last.laborCostKrw(), last.bottleneckRole(), workdays.count(), Instant.now());
+        return new ProductivitySummary(enabled, last.usedCapacity(), last.productionRequested(), last.productionBacklog(),
+                last.productivityScore(), average, last.payrollCost(), last.payrollCost(), last.bottleneckRole(),
+                workdayResults.count(), Instant.now());
     }
 
     @Transactional
     public WorkdayRunResponse runWorkday(LocalDate requestedDate) {
         LocalDate workDate = requestedDate == null ? LocalDate.now() : requestedDate;
         String workdayId = "NEXUS-WORKDAY-" + workDate;
-        WorkdayProductivityEntity existing = workdays.findByWorkdayId(workdayId).orElse(null);
+        WorkdayResultEntity existing = workdayResults.findByWorkdayId(workdayId).orElse(null);
         if (existing != null) {
             return workdayResponse(existing);
         }
 
         CapacitySnapshot capacity = capacitySnapshot();
-        int backlogBefore = capacity.demandUnits();
-        int processed = Math.min(backlogBefore, capacity.totalCapacity());
-        int backlogAfter = Math.max(0, backlogBefore - processed);
-        BigDecimal productivityRate = backlogBefore == 0
-                ? BigDecimal.ONE
-                : BigDecimal.valueOf(processed).divide(BigDecimal.valueOf(backlogBefore), 4, RoundingMode.HALF_UP);
-        String status = backlogAfter > 0 ? "BACKLOG_INCREASED" : "WORKDAY_COMPLETED";
+        int productionRequested = nexus.productionOrders().size();
+        int productionCompleted = Math.min(productionRequested, capacity.productionCapacity());
+        int productionBacklog = Math.max(0, productionRequested - productionCompleted);
+        int qualityChecked = Math.min(nexus.inspections().size(), capacity.qualityCapacity());
+        int qualityDefects = Math.max(0, nexus.inspections().size() - capacity.qualityCapacity());
+        int maintenanceCompleted = Math.min(nexus.maintenanceEvents().size(), capacity.maintenanceCapacity());
+        int used = productionCompleted + qualityChecked + maintenanceCompleted;
+        int total = capacity.totalCapacity();
+        BigDecimal productivity = productionRequested == 0 ? BigDecimal.ONE
+                : BigDecimal.valueOf(productionCompleted).divide(BigDecimal.valueOf(productionRequested), 4, RoundingMode.HALF_UP);
+
         Map<String, Object> evidence = new LinkedHashMap<>();
         evidence.put("enabled", enabled);
         evidence.put("baselineCapacity", baselineCapacity);
-        evidence.put("productionDemand", nexus.productionOrders().size());
+        evidence.put("productionRequested", productionRequested);
         evidence.put("qualityDemand", nexus.inspections().size());
         evidence.put("maintenanceDemand", nexus.maintenanceEvents().size());
         evidence.put("bottleneckRole", capacity.bottleneckRole());
 
-        WorkdayProductivityEntity saved = workdays.save(new WorkdayProductivityEntity(
+        WorkdayResultEntity saved = workdayResults.save(new WorkdayResultEntity(
                 workdayId,
                 workDate,
-                "SIM-" + workDate,
-                "CYCLE-" + workDate,
-                "CORR-" + UUID.randomUUID(),
-                "CAUSE-WORKDAY-RUN",
-                capacity.totalCapacity(),
-                processed,
-                backlogBefore,
-                backlogAfter,
-                dailyLaborCost(),
-                productivityRate,
+                total,
+                used,
+                Math.max(0, total - used),
+                productionRequested,
+                productionCompleted,
+                productionBacklog,
+                qualityChecked,
+                qualityDefects,
+                maintenanceCompleted,
+                payrollCost(),
+                productivity,
                 capacity.bottleneckRole(),
-                status,
+                productionBacklog > 0 ? "BACKLOG_INCREASED" : "WORKDAY_COMPLETED",
                 write(evidence),
                 Instant.now()
         ));
@@ -184,8 +251,8 @@ public class WorkforceService {
 
     private WorkforceAllocationRequest normalize(WorkforceAllocationRequest request) {
         WorkforceAllocationRequest safe = request == null
-                ? new WorkforceAllocationRequest(null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null)
+                ? new WorkforceAllocationRequest(null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null)
                 : request;
         String eventId = text(safe.eventId(), "WF-" + UUID.randomUUID());
         String idempotencyKey = text(safe.idempotencyKey(), "WF-IDEMP-" + UUID.randomUUID());
@@ -193,14 +260,19 @@ public class WorkforceService {
         if (!ALLOWED_SOURCES.contains(source)) {
             source = "ArchiveOS";
         }
+        WorkforceRole role = safe.role() == null ? WorkforceRole.PRODUCTION_OPERATOR : safe.role();
         return new WorkforceAllocationRequest(
                 eventId,
                 idempotencyKey,
                 source,
                 safe.eventType() == null ? WorkforceEventType.WORKFORCE_ALLOCATION_ASSIGNED : safe.eventType(),
-                safe.role() == null ? WorkforceRole.PRODUCTION : safe.role(),
-                safe.assignedUnits() == null ? 0 : safe.assignedUnits(),
+                role,
+                safe.allocatedHeadcount(),
+                safe.assignedUnits() == null ? safe.allocatedHeadcount() : safe.assignedUnits(),
+                safe.capacityPerPersonPerDay(),
+                safe.productivityScore(),
                 safe.skillLevel(),
+                safe.wagePerDay(),
                 safe.costPerUnitKrw(),
                 safe.workdayId(),
                 safe.simulationRunId(),
@@ -216,44 +288,88 @@ public class WorkforceService {
 
     private WorkforceAllocationResponse allocationResponse(WorkforceAllocationEntity entity, boolean duplicate) {
         return new WorkforceAllocationResponse(entity.eventId(), entity.idempotencyKey(), entity.sourceService(),
-                entity.role(), entity.assignedUnits(), entity.skillLevel(), entity.costPerUnitKrw(),
-                entity.status(), duplicate, entity.reason(), entity.correlationId(), entity.createdAt());
+                entity.role(), entity.allocationId(), entity.targetService(), entity.allocatedHeadcount(),
+                entity.assignedUnits(), entity.capacityPerPersonPerDay(), entity.productivityScore(),
+                entity.skillLevel(), entity.wagePerDay(), entity.costPerUnitKrw(), entity.effectiveCapacity(),
+                entity.usedCapacity(), entity.remainingCapacity(), entity.status(), duplicate, entity.reason(),
+                entity.correlationId(), entity.createdAt());
     }
 
-    private WorkdayRunResponse workdayResponse(WorkdayProductivityEntity entity) {
+    private WorkdayRunResponse workdayResponse(WorkdayResultEntity entity) {
         return new WorkdayRunResponse(entity.workdayId(), entity.workDate(), entity.totalCapacity(),
-                entity.processedUnits(), entity.backlogBefore(), entity.backlogAfter(), entity.laborCostKrw(),
-                entity.productivityRate(), entity.bottleneckRole(), entity.status(), read(entity.evidenceJson()),
-                entity.createdAt());
+                entity.usedCapacity(), entity.productionRequested(), entity.productionBacklog(), entity.payrollCost(),
+                entity.payrollCost(), entity.productivityScore(), entity.productionRequested(), entity.productionCompleted(),
+                entity.qualityChecked(), entity.qualityDefects(), entity.maintenanceCompleted(), entity.bottleneckRole(),
+                entity.status(), read(entity.evidenceJson()), entity.createdAt());
+    }
+
+    private CapacityUse consume(WorkforceRole role, int requested) {
+        if (!enabled) {
+            int used = Math.min(requested, baselineCapacity);
+            return new CapacityUse("BASELINE", used, Math.max(0, baselineCapacity - used));
+        }
+        int remaining = requested;
+        String allocationId = null;
+        int used = 0;
+        for (WorkforceAllocationEntity allocation : allocations.findAllByRoleAndStatusOrderByCreatedAtAsc(role, WorkforceAllocationStatus.ACTIVE)) {
+            if (remaining <= 0) {
+                break;
+            }
+            int before = allocation.remainingCapacity();
+            allocation.consumeCapacity(remaining, Instant.now());
+            int consumed = before - allocation.remainingCapacity();
+            if (consumed > 0 && allocationId == null) {
+                allocationId = allocation.allocationId();
+            }
+            used += consumed;
+            remaining -= consumed;
+        }
+        return new CapacityUse(allocationId == null ? "NONE" : allocationId, used, roleRemaining(role));
     }
 
     private CapacitySnapshot capacitySnapshot() {
-        int production = enabled ? roleCapacity(WorkforceRole.PRODUCTION) : baselineCapacity;
-        int quality = enabled ? roleCapacity(WorkforceRole.QUALITY) : Math.max(1, baselineCapacity / 3);
-        int maintenance = enabled ? roleCapacity(WorkforceRole.MAINTENANCE) : Math.max(1, baselineCapacity / 4);
-        int total = production + quality + maintenance;
-        int demand = demandUnits();
-        return new CapacitySnapshot(production, quality, maintenance, total, demand, bottleneckRole());
+        int production = enabled ? roleCapacity(WorkforceRole.PRODUCTION_OPERATOR) : baselineCapacity;
+        int quality = enabled ? roleCapacity(WorkforceRole.QUALITY_INSPECTOR) : Math.max(1, baselineCapacity / 3);
+        int maintenance = enabled ? roleCapacity(WorkforceRole.MAINTENANCE_ENGINEER) : Math.max(1, baselineCapacity / 4);
+        int material = enabled ? roleCapacity(WorkforceRole.MATERIAL_HANDLER) : Math.max(1, baselineCapacity / 5);
+        int management = enabled ? roleCapacity(WorkforceRole.FACTORY_MANAGER) : Math.max(1, baselineCapacity / 10);
+        int used = activeAllocations().stream().mapToInt(WorkforceAllocationEntity::usedCapacity).sum();
+        int total = production + quality + maintenance + material + management;
+        return new CapacitySnapshot(production, quality, maintenance, material, management, total, used, demandUnits(), bottleneckRole());
     }
 
     private int roleCapacity(WorkforceRole role) {
         int capacity = activeAllocations().stream()
                 .filter(allocation -> allocation.role() == role)
-                .mapToInt(allocation -> allocation.skillLevel()
-                        .multiply(BigDecimal.valueOf(allocation.assignedUnits()))
-                        .multiply(BigDecimal.valueOf(roleMultiplier(role)))
-                        .setScale(0, RoundingMode.HALF_UP)
-                        .intValue())
+                .mapToInt(WorkforceAllocationEntity::effectiveCapacity)
                 .sum();
-        return Math.max(1, capacity);
+        return Math.max(0, capacity);
     }
 
-    private double roleMultiplier(WorkforceRole role) {
+    private int roleRemaining(WorkforceRole role) {
+        if (!enabled) {
+            return baselineCapacity;
+        }
+        return activeAllocations().stream()
+                .filter(allocation -> allocation.role() == role)
+                .mapToInt(WorkforceAllocationEntity::remainingCapacity)
+                .sum();
+    }
+
+    private int defaultCapacityPerPerson(WorkforceRole role) {
         return switch (role) {
-            case PRODUCTION -> 12.0;
-            case QUALITY -> 8.0;
-            case MAINTENANCE -> 6.0;
+            case PRODUCTION_OPERATOR -> 20;
+            case QUALITY_INSPECTOR -> 30;
+            case MAINTENANCE_ENGINEER -> 5;
+            case MATERIAL_HANDLER -> 25;
+            case FACTORY_MANAGER -> 80;
         };
+    }
+
+    private int effectiveCapacity(int headcount, int capacityPerPerson, BigDecimal productivity) {
+        return productivity.multiply(BigDecimal.valueOf(headcount)).multiply(BigDecimal.valueOf(capacityPerPerson))
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
     }
 
     private int demandUnits() {
@@ -261,17 +377,17 @@ public class WorkforceService {
     }
 
     private String bottleneckRole() {
-        int productionGap = nexus.productionOrders().size() - (enabled ? roleCapacity(WorkforceRole.PRODUCTION) : baselineCapacity);
-        int qualityGap = nexus.inspections().size() - (enabled ? roleCapacity(WorkforceRole.QUALITY) : baselineCapacity / 3);
-        int maintenanceGap = nexus.maintenanceEvents().size() - (enabled ? roleCapacity(WorkforceRole.MAINTENANCE) : baselineCapacity / 4);
+        int productionGap = nexus.productionOrders().size() - (enabled ? roleCapacity(WorkforceRole.PRODUCTION_OPERATOR) : baselineCapacity);
+        int qualityGap = nexus.inspections().size() - (enabled ? roleCapacity(WorkforceRole.QUALITY_INSPECTOR) : baselineCapacity / 3);
+        int maintenanceGap = nexus.maintenanceEvents().size() - (enabled ? roleCapacity(WorkforceRole.MAINTENANCE_ENGINEER) : baselineCapacity / 4);
         if (productionGap >= qualityGap && productionGap >= maintenanceGap && productionGap > 0) {
-            return WorkforceRole.PRODUCTION.name();
+            return WorkforceRole.PRODUCTION_OPERATOR.name();
         }
         if (qualityGap >= maintenanceGap && qualityGap > 0) {
-            return WorkforceRole.QUALITY.name();
+            return WorkforceRole.QUALITY_INSPECTOR.name();
         }
         if (maintenanceGap > 0) {
-            return WorkforceRole.MAINTENANCE.name();
+            return WorkforceRole.MAINTENANCE_ENGINEER.name();
         }
         return "NONE";
     }
@@ -279,13 +395,13 @@ public class WorkforceService {
     private int activeWorkers(WorkforceRole role) {
         return activeAllocations().stream()
                 .filter(allocation -> allocation.role() == role)
-                .mapToInt(WorkforceAllocationEntity::assignedUnits)
+                .mapToInt(WorkforceAllocationEntity::allocatedHeadcount)
                 .sum();
     }
 
-    private BigDecimal dailyLaborCost() {
+    private BigDecimal payrollCost() {
         return activeAllocations().stream()
-                .map(allocation -> allocation.costPerUnitKrw().multiply(BigDecimal.valueOf(allocation.assignedUnits())))
+                .map(allocation -> allocation.wagePerDay().multiply(BigDecimal.valueOf(allocation.allocatedHeadcount())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
@@ -298,6 +414,17 @@ public class WorkforceService {
             return fallback;
         }
         return value;
+    }
+
+    private int positiveInt(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return Math.max(0, number.intValue());
+        }
+        try {
+            return value == null ? fallback : Math.max(0, Integer.parseInt(value.toString()));
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
     }
 
     private String write(Map<String, Object> payload) {
@@ -320,11 +447,31 @@ public class WorkforceService {
         return value == null || value.isBlank() ? fallback : value;
     }
 
+    private String asString(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    public record ProductionCapacityDecision(
+            EventType eventType,
+            String aggregateId,
+            int requestedQuantity,
+            int completedQuantity,
+            int backlogQuantity,
+            Map<String, Object> workforcePayload
+    ) {
+    }
+
+    private record CapacityUse(String allocationId, int used, int remaining) {
+    }
+
     private record CapacitySnapshot(
             int productionCapacity,
             int qualityCapacity,
             int maintenanceCapacity,
+            int materialCapacity,
+            int managementCapacity,
             int totalCapacity,
+            int usedCapacity,
             int demandUnits,
             String bottleneckRole
     ) {

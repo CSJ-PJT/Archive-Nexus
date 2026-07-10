@@ -3,9 +3,11 @@ package com.archivenexus.backend.outbox;
 import com.archivenexus.backend.outbox.OutboxModels.*;
 import com.archivenexus.backend.market.MarketInboundEventRepository;
 import com.archivenexus.backend.market.MarketEventModels.MarketEventStatus;
+import com.archivenexus.backend.workforce.WorkforceService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -57,6 +59,7 @@ public class OutboxEventService {
     private final OutboxRoutingPolicy routingPolicy;
     private final ObjectMapper mapper;
     private final MarketInboundEventRepository marketInboundEventRepository;
+    private final ObjectProvider<WorkforceService> workforceService;
     private final int publishBatchSize;
     private final int maxRetryCount;
     private final boolean marketInboundEnabled;
@@ -65,6 +68,7 @@ public class OutboxEventService {
                               OutboxPublishRouter router,
                               OutboxRoutingPolicy routingPolicy,
                               MarketInboundEventRepository marketInboundEventRepository,
+                              ObjectProvider<WorkforceService> workforceService,
                               ObjectMapper mapper,
                               @Value("${archive.integrations.routing.chunk-size:${archive-nexus.ledger.publish-batch-size:50}}") int publishBatchSize,
                               @Value("${archive.integrations.routing.max-retry-count:5}") int maxRetryCount,
@@ -73,6 +77,7 @@ public class OutboxEventService {
         this.router = router;
         this.routingPolicy = routingPolicy;
         this.marketInboundEventRepository = marketInboundEventRepository;
+        this.workforceService = workforceService;
         this.mapper = mapper;
         this.marketInboundEnabled = marketInboundEnabled;
         this.publishBatchSize = Math.max(1, Math.min(publishBatchSize, 500));
@@ -198,7 +203,8 @@ public class OutboxEventService {
                 marketInboundEventRepository.count(),
                 marketInboundEventRepository.countByProcessingStatus(MarketEventStatus.PROCESSED),
                 marketInboundEventRepository.countByProcessingStatus(MarketEventStatus.FAILED) + marketInboundEventRepository.countByProcessingStatus(MarketEventStatus.REJECTED),
-                repository.countBySource("Archive-Market")
+                repository.countBySource("Archive-Market"),
+                workforceService.getIfAvailable() == null ? null : workforceService.getIfAvailable().workforceSummary()
         );
     }
 

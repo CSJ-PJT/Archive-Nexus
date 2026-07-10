@@ -60,9 +60,11 @@ Allowed `sourceService` values:
 
 Supported roles:
 
-- `PRODUCTION`
-- `QUALITY`
-- `MAINTENANCE`
+- `PRODUCTION_OPERATOR`
+- `QUALITY_INSPECTOR`
+- `MAINTENANCE_ENGINEER`
+- `MATERIAL_HANDLER`
+- `FACTORY_MANAGER`
 
 ## Guard Rules
 
@@ -75,9 +77,9 @@ Supported roles:
 
 When workforce is enabled:
 
-- `PRODUCTION` capacity = `assignedUnits * skillLevel * 12`
-- `QUALITY` capacity = `assignedUnits * skillLevel * 8`
-- `MAINTENANCE` capacity = `assignedUnits * skillLevel * 6`
+- `effectiveCapacity = allocatedHeadcount * capacityPerPersonPerDay * productivityScore`
+- Market `PRODUCTION_REQUESTED` events consume `PRODUCTION_OPERATOR` capacity.
+- Capacity overflow produces `BACKLOG_INCREASED` instead of immediate `PRODUCTION_COMPLETED`.
 
 When workforce is disabled:
 

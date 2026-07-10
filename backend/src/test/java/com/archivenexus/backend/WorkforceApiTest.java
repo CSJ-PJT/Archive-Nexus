@@ -39,10 +39,11 @@ class WorkforceApiTest {
                                   "idempotencyKey": "WF-IDEMP-001",
                                   "sourceService": "ArchiveOS",
                                   "eventType": "WORKFORCE_ALLOCATION_ASSIGNED",
-                                  "role": "PRODUCTION",
-                                  "assignedUnits": 10,
-                                  "skillLevel": 1.2,
-                                  "costPerUnitKrw": 150000,
+                                  "role": "PRODUCTION_OPERATOR",
+                                  "allocatedHeadcount": 10,
+                                  "capacityPerPersonPerDay": 20,
+                                  "productivityScore": 1.2,
+                                  "wagePerDay": 150000,
                                   "workdayId": "WD-001",
                                   "simulationRunId": "SIM-001",
                                   "settlementCycleId": "CYCLE-001",
@@ -56,12 +57,13 @@ class WorkforceApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ACTIVE"))
                 .andExpect(jsonPath("$.duplicate").value(false))
-                .andExpect(jsonPath("$.assignedUnits").value(10));
+                .andExpect(jsonPath("$.allocatedHeadcount").value(10))
+                .andExpect(jsonPath("$.effectiveCapacity").value(240));
 
         mvc.perform(get("/api/workforce/summary"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(true))
-                .andExpect(jsonPath("$.activeProductionWorkers").value(10))
+                .andExpect(jsonPath("$.activeProductionOperators").value(10))
                 .andExpect(jsonPath("$.dailyLaborCostKrw").value(1500000));
 
         mvc.perform(get("/api/capacity/summary"))
@@ -86,8 +88,8 @@ class WorkforceApiTest {
                   "eventId": "WF-EVT-DUP",
                   "idempotencyKey": "WF-IDEMP-DUP",
                   "sourceService": "Archive-Market",
-                  "role": "QUALITY",
-                  "assignedUnits": 3,
+                  "role": "QUALITY_INSPECTOR",
+                  "allocatedHeadcount": 3,
                   "hopCount": 0,
                   "maxHop": 8
                 }
@@ -111,8 +113,8 @@ class WorkforceApiTest {
                                   "eventId": "WF-EVT-HOP",
                                   "idempotencyKey": "WF-IDEMP-HOP",
                                   "sourceService": "ArchiveOS",
-                                  "role": "MAINTENANCE",
-                                  "assignedUnits": 5,
+                                  "role": "MAINTENANCE_ENGINEER",
+                                  "allocatedHeadcount": 5,
                                   "hopCount": 9,
                                   "maxHop": 3
                                 }
