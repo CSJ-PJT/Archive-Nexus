@@ -49,6 +49,11 @@ Factory Runtime
 | `POST` | `/api/outbox/events/publish?target=auto&dryRun=true` | Route or publish outbox candidates |
 | `POST` | `/api/events/market` | Receive Archive-Market synthetic order/production/shipment/claim events |
 | `POST` | `/api/events/market/bulk` | Receive Archive-Market event batch |
+| `GET` | `/api/workforce/summary` | Synthetic workforce capacity, backlog, and cost summary |
+| `GET` | `/api/productivity/summary` | Latest workday productivity result |
+| `GET` | `/api/capacity/summary` | Baseline or assigned workforce capacity summary |
+| `POST` | `/api/workforce/allocations` | Receive synthetic workforce allocation from ArchiveOS or Archive-Market |
+| `POST` | `/api/workforce/workday/run?date=YYYY-MM-DD` | Record a synthetic workday productivity snapshot |
 | `POST` | `/api/logistics/settlements/daily` | Receive synthetic daily manufacturing settlement from Archive-Logistics |
 | `GET` | `/api/logistics/settlements/summary` | Inspect received Logistics settlement callback status |
 | `GET` | `/api/archiveos/status` | ArchiveOS availability state |
@@ -100,6 +105,8 @@ ARCHIVE_INTEGRATIONS_LOGITICS_TIMEOUT_MS=30000
 ARCHIVE_INTEGRATIONS_LEDGER_TIMEOUT_MS=30000
 ARCHIVE_INTEGRATIONS_ROUTING_ALLOW_LEDGER_DIRECT_FALLBACK_FOR_LOGISTICS=false
 ARCHIVE_INTEGRATIONS_ROUTING_PUBLISH_INTERVAL_MS=15000
+ARCHIVE_WORKFORCE_ENABLED=false
+ARCHIVE_WORKFORCE_BASELINE_CAPACITY=120
 SPRING_TASK_SCHEDULING_POOL_SIZE=4
 ```
 
@@ -111,6 +118,8 @@ Do not commit `.env`, tokens, webhooks, private keys, or local data directories.
 curl.exe "http://localhost:8080/api/outbox/summary"
 curl.exe "http://localhost:8080/api/integrations/summary"
 curl.exe "http://localhost:8080/api/events/market"
+curl.exe "http://localhost:8080/api/workforce/summary"
+curl.exe "http://localhost:8080/api/capacity/summary"
 
 curl.exe -X POST "http://localhost:8080/api/outbox/events/generate?count=20&type=logistics"
 curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=auto"
@@ -126,6 +135,7 @@ Expected behavior:
 - Logistics generation creates events routed to `LOGITICS`.
 - Ledger generation creates events routed to `LEDGER`.
 - Archive-Logistics daily settlement callbacks are stored idempotently and do not mutate manufacturing source data.
+- Workforce summaries use synthetic capacity only and do not include real employee or payroll data.
 - Enabled downstream services receive published events automatically or through the manual publish commands above.
 - Disabled external services are reported as `DISABLED`; Nexus remains `HEALTHY`.
 
@@ -172,6 +182,7 @@ curl.exe -X POST "http://localhost:8080/api/outbox/events/publish?target=ledger"
 - [Architecture](docs/architecture.md)
 - [Outbox routing](docs/outbox-routing.md)
 - [API reference](docs/api-reference.md)
+- [Operational workforce](docs/operational-workforce.md)
 - [Smoke test](docs/smoke-test.md)
 - [Operations runbook](docs/operations-runbook.md)
 

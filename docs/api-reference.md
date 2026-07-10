@@ -67,6 +67,26 @@ GET /api/platform/manifest
 
 These APIs keep returning a Nexus-level response even if an external service is disabled or unavailable.
 
+## Operational Workforce
+
+```http
+GET /api/workforce/summary
+GET /api/productivity/summary
+GET /api/capacity/summary
+POST /api/workforce/allocations
+POST /api/workforce/workday/run?date=YYYY-MM-DD
+```
+
+Workforce data is synthetic operational capacity data. It must not contain real employee names, payroll data, or personal data.
+
+`POST /api/workforce/allocations` accepts allocation events from `ArchiveOS` or `Archive-Market` and supports `PRODUCTION`, `QUALITY`, and `MAINTENANCE` roles.
+
+Guard behavior:
+
+- duplicate `eventId` or `idempotencyKey` returns `duplicate=true`;
+- `hopCount > maxHop` returns `REJECTED`;
+- `ARCHIVE_WORKFORCE_ENABLED=false` keeps baseline capacity behavior.
+
 ## Archive-Market Inbound APIs
 
 ```http

@@ -56,6 +56,9 @@ archive-nexus:
     state-file: data/archive-nexus-state.json
 
 archive:
+  workforce:
+    enabled: ${ARCHIVE_WORKFORCE_ENABLED:false}
+    baseline-capacity: ${ARCHIVE_WORKFORCE_BASELINE_CAPACITY:120}
   integrations:
     logitics:
       enabled: ${ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED:true}

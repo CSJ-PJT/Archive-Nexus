@@ -100,3 +100,19 @@ Nexus treats external integrations as optional. If Archive-Logistics, Archive-Le
 - Market event acceptance API (`/api/events/market*`) continues to persist events even when downstream integrations are disabled.
 - Market duplicate guard uses `idempotencyKey` first, then `eventId`.
 - Hop guard (`hopCount > maxHop`) is rejected and persisted as `REJECTED`.
+
+## Operational Workforce
+
+Archive-Nexus exposes a synthetic workforce model for production, quality, and maintenance capacity.
+
+```mermaid
+flowchart LR
+  A[ArchiveOS / Archive-Market] -->|WORKFORCE_ALLOCATION_ASSIGNED| B[Nexus Workforce Allocation]
+  B --> C[Capacity Summary]
+  C --> D[Workday Productivity Snapshot]
+  D --> E[ArchiveOS Control Tower]
+```
+
+- `ARCHIVE_WORKFORCE_ENABLED=false` keeps baseline capacity behavior.
+- `ARCHIVE_WORKFORCE_ENABLED=true` derives capacity from active synthetic workforce allocations.
+- Workforce data is synthetic operational capacity data only. It must not include real employee names, payroll data, or personal data.
