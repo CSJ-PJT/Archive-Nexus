@@ -98,19 +98,23 @@ public class RuntimeWorkLoopService {
 
     public RuntimeStatusResponse status() {
         int currentBacklog = Math.max(backlogCount, workforce.workforceSummary().backlog());
+        String observedSchedulerStatus = autoRunEnabled && "IDLE".equals(schedulerStatus) ? "RUNNING" : schedulerStatus;
         String pipelineStatus = !autoRunEnabled
                 ? "DISABLED"
-                : "FAILED".equals(schedulerStatus) ? "DEGRADED" : "LIVE";
+                : "FAILED".equals(observedSchedulerStatus) ? "DEGRADED" : "LIVE";
         return new RuntimeStatusResponse(
                 SERVICE_NAME,
                 autoRunEnabled && !"FAILED".equals(schedulerStatus),
                 autoRunEnabled,
-                schedulerStatus,
+                observedSchedulerStatus,
                 lastWorkAt,
                 lastEventAt,
                 eventsProducedLastTick,
                 eventsConsumedLastTick,
                 currentBacklog,
+                currentBacklog > 0 && lastWorkAt != null ? Math.max(0, Duration.between(lastWorkAt, Instant.now()).toSeconds()) : null,
+                lastEventAt == null ? null : lastEventAt.toEpochMilli() + "|" + SERVICE_NAME,
+                "FAILED".equals(schedulerStatus) ? "Runtime work tick failed" : null,
                 pipelineStatus,
                 Instant.now()
         );
@@ -128,7 +132,6 @@ public class RuntimeWorkLoopService {
         List<MarketEventRequest> requests = new ArrayList<>();
         addIfAllowed(requests, orderPlaced(tickId, correlationId, simulationRunId, settlementCycleId, now, quantity));
         addIfAllowed(requests, productionRequested(tickId, correlationId, simulationRunId, settlementCycleId, now, quantity));
-        addIfAllowed(requests, shipmentRequested(tickId, correlationId, simulationRunId, settlementCycleId, now, quantity));
 
         int produced = 0;
         int consumed = 0;
@@ -160,7 +163,7 @@ public class RuntimeWorkLoopService {
                                            String settlementCycleId, Instant now, int quantity) {
         String orderId = tickId + "-ORDER";
         return request(tickId + "-ORDER-PLACED", MarketEventType.MARKET_ORDER_PLACED, now, simulationRunId,
-                settlementCycleId, correlationId, tickId, payload(orderId, tickId + "-SHIP", quantity, "NORMAL"));
+                settlementCycleId, correlationId, tickId, payload(orderId, tickId + "-SHIP", quantity, "NORMAL", false));
     }
 
     private MarketEventRequest productionRequested(String tickId, String correlationId, String simulationRunId,
@@ -168,15 +171,7 @@ public class RuntimeWorkLoopService {
         String orderId = tickId + "-ORDER";
         return request(tickId + "-PRODUCTION-REQUESTED", MarketEventType.PRODUCTION_REQUESTED, now.plusMillis(1),
                 simulationRunId, settlementCycleId, correlationId, tickId + "-ORDER-PLACED",
-                payload(orderId, tickId + "-SHIP", quantity, "HIGH"));
-    }
-
-    private MarketEventRequest shipmentRequested(String tickId, String correlationId, String simulationRunId,
-                                                 String settlementCycleId, Instant now, int quantity) {
-        String orderId = tickId + "-ORDER";
-        return request(tickId + "-SHIPMENT-REQUESTED", MarketEventType.SHIPMENT_REQUESTED, now.plusMillis(2),
-                simulationRunId, settlementCycleId, correlationId, tickId + "-PRODUCTION-REQUESTED",
-                payload(orderId, tickId + "-SHIP", quantity, "HIGH"));
+                payload(orderId, tickId + "-SHIP", quantity, "HIGH", Math.floorMod(tickId.hashCode(), 5) == 0));
     }
 
     private MarketEventRequest request(String eventId, MarketEventType eventType, Instant occurredAt,
@@ -199,7 +194,8 @@ public class RuntimeWorkLoopService {
         );
     }
 
-    private Map<String, Object> payload(String orderId, String shipmentId, int quantity, String priority) {
+    private Map<String, Object> payload(String orderId, String shipmentId, int quantity, String priority,
+                                        boolean maintenanceRequired) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("orderId", orderId);
         payload.put("customerId", "SYNTHETIC-CUSTOMER-B2B");
@@ -216,6 +212,7 @@ public class RuntimeWorkLoopService {
         payload.put("destinationCode", "DC-SEOUL-01");
         payload.put("itemType", "battery-module");
         payload.put("workdayId", "NEXUS-WORKDAY-" + LocalDate.now());
+        payload.put("maintenanceRequired", maintenanceRequired);
         return payload;
     }
 

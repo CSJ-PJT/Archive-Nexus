@@ -231,14 +231,7 @@ public class MarketEventService {
                 WorkforceService.ProductionCapacityDecision decision = workforce.processProductionRequest(safePayload);
                 Map<String, Object> mappedPayload = new LinkedHashMap<>(safePayload);
                 mappedPayload.putAll(decision.workforcePayload());
-                yield List.of(
-                    emit(decision.eventType(),
-                            header,
-                            mappedPayload,
-                            decision.aggregateId(),
-                            "ProductionOrder"
-                    )
-                );
+                yield manufacturingOutbox(header, mappedPayload, decision);
             }
             case SHIPMENT_REQUESTED -> shipmentOutbox(header, safePayload);
             case ORDER_CANCELLED -> List.of(
@@ -268,6 +261,43 @@ public class MarketEventService {
             case MARKET_ORDER_PLACED -> List.of();
             case UNKNOWN -> throw new IllegalArgumentException("Unknown market eventType: " + header.eventType());
         };
+    }
+
+    /**
+     * Converts one accepted Market production request into a bounded manufacturing chain.
+     * A shipment is created only after the requested quantity was materially consumed and
+     * inspected; a capacity shortage remains a local delayed/backlog signal instead.
+     */
+    private List<OutboxEventResponse> manufacturingOutbox(MarketInboundEventRequest header,
+                                                           Map<String, Object> payload,
+                                                           WorkforceService.ProductionCapacityDecision decision) {
+        List<OutboxEventResponse> events = new ArrayList<>();
+        String orderId = decision.aggregateId();
+        if (decision.materialConsumed() > 0) {
+            events.add(emit(EventType.MATERIAL_CONSUMED, header, payload, orderId + ":material", "InventoryTransaction"));
+        }
+        if (decision.qualityInspected() > 0) {
+            events.add(emit(EventType.QUALITY_INSPECTION_COMPLETED, header, payload, orderId + ":quality", "QualityInspection"));
+        }
+        if (decision.maintenanceRequired()) {
+            events.add(emit(decision.maintenanceBlocked() ? EventType.MAINTENANCE_REQUIRED : EventType.MAINTENANCE_COMPLETED,
+                    header, payload, orderId + ":maintenance", "MaintenanceEvent"));
+        }
+        if (decision.qualityDefects() > 0) {
+            events.add(emit(EventType.QUALITY_DEFECT_DETECTED, header, payload, orderId + ":quality-defect", "QualityInspection"));
+        }
+        if (decision.completedQuantity() > 0 && !outbox.hasEventForAggregate(EventType.PRODUCTION_COMPLETED, orderId)) {
+            events.add(emit(EventType.PRODUCTION_COMPLETED, header, payload, orderId, "ProductionOrder"));
+        }
+        if (decision.backlogQuantity() > 0) {
+            events.add(emit(EventType.PRODUCTION_DELAYED, header, payload, orderId, "ProductionOrder"));
+            events.add(emit(EventType.BACKLOG_INCREASED, header, payload, orderId, "ProductionOrder"));
+        }
+        if (decision.dispatchAllowed() && parseBoolean(payload.get("requiresShipment"), true)) {
+            events.add(emit(EventType.LOGISTICS_DISPATCHED, header, payload,
+                    eventAggregateId(header, payload, "shipmentId"), "MarketShipment"));
+        }
+        return events;
     }
 
     private List<OutboxEventResponse> shipmentOutbox(MarketInboundEventRequest header, Map<String, Object> payload) {
@@ -381,6 +411,7 @@ public class MarketEventService {
             merged.put("payrollCost", payload.get("payrollCost"));
             merged.put("qualityRiskIncreased", payload.get("qualityRiskIncreased"));
             merged.put("maintenanceRiskIncreased", payload.get("maintenanceRiskIncreased"));
+            merged.put("maintenanceRequired", payload.get("maintenanceRequired"));
         }
 
         merged.put("marketPayload", payload == null ? Map.of() : payload);

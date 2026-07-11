@@ -116,29 +116,50 @@ public class WorkforceService {
         int requested = positiveInt(payload.get("quantity"), 1);
         String orderId = text(asString(payload.get("orderId")), "ORDER-" + UUID.randomUUID());
         String workdayId = text(asString(payload.get("workdayId")), "NEXUS-WORKDAY-" + LocalDate.now());
-        CapacityUse use = consume(WorkforceRole.PRODUCTION_OPERATOR, requested);
-        int completed = use.used();
+        CapacityUse production = consume(WorkforceRole.PRODUCTION_OPERATOR, requested);
+        CapacityUse material = consume(WorkforceRole.MATERIAL_HANDLER, production.used());
+        boolean maintenanceRequired = booleanValue(payload.get("maintenanceRequired"))
+                || "CRITICAL".equalsIgnoreCase(asString(payload.get("priority")));
+        CapacityUse maintenance = maintenanceRequired
+                ? consume(WorkforceRole.MAINTENANCE_ENGINEER, 1)
+                : new CapacityUse("NOT_REQUIRED", 0, roleRemaining(WorkforceRole.MAINTENANCE_ENGINEER));
+        boolean maintenanceBlocked = maintenanceRequired && maintenance.used() == 0;
+        int inspectionDemand = maintenanceBlocked ? 0 : material.used();
+        CapacityUse quality = consume(WorkforceRole.QUALITY_INSPECTOR, inspectionDemand);
+        int completed = quality.used();
         int backlog = Math.max(0, requested - completed);
-        String bottleneck = backlog > 0 ? WorkforceRole.PRODUCTION_OPERATOR.name() : bottleneckRole();
+        int qualityShortfall = Math.max(0, material.used() - quality.used());
+        String bottleneck = backlog > 0
+                ? bottleneckForRuntime(production, material, quality, maintenance, maintenanceBlocked)
+                : bottleneckRole();
         BigDecimal productivity = requested == 0 ? BigDecimal.ONE
                 : BigDecimal.valueOf(completed).divide(BigDecimal.valueOf(requested), 4, RoundingMode.HALF_UP);
 
         Map<String, Object> workforcePayload = new LinkedHashMap<>();
         workforcePayload.put("workdayId", workdayId);
-        workforcePayload.put("workforceAllocationId", use.allocationId());
+        workforcePayload.put("workforceAllocationId", production.allocationId());
         workforcePayload.put("productivityScore", productivity);
-        workforcePayload.put("usedCapacity", completed);
-        workforcePayload.put("remainingCapacity", use.remaining());
+        workforcePayload.put("usedCapacity", production.used());
+        workforcePayload.put("remainingCapacity", production.remaining());
         workforcePayload.put("backlogCount", backlog);
         workforcePayload.put("bottleneckRole", bottleneck);
         workforcePayload.put("productionRequested", requested);
         workforcePayload.put("productionCompleted", completed);
+        workforcePayload.put("materialConsumed", material.used());
+        workforcePayload.put("qualityInspected", quality.used());
+        workforcePayload.put("qualityDefects", qualityShortfall);
+        workforcePayload.put("maintenanceRequired", maintenanceRequired);
+        workforcePayload.put("maintenanceCompleted", maintenance.used());
+        workforcePayload.put("maintenanceBlocked", maintenanceBlocked);
+        workforcePayload.put("dispatchAllowed", completed >= requested && qualityShortfall == 0 && !maintenanceBlocked);
         workforcePayload.put("payrollCost", payrollCost());
-        workforcePayload.put("qualityRiskIncreased", roleRemaining(WorkforceRole.QUALITY_INSPECTOR) < completed);
-        workforcePayload.put("maintenanceRiskIncreased", roleRemaining(WorkforceRole.MAINTENANCE_ENGINEER) <= 0);
+        workforcePayload.put("qualityRiskIncreased", qualityShortfall > 0);
+        workforcePayload.put("maintenanceRiskIncreased", maintenanceBlocked || roleRemaining(WorkforceRole.MAINTENANCE_ENGINEER) <= 0);
 
-        EventType eventType = backlog > 0 ? EventType.BACKLOG_INCREASED : EventType.PRODUCTION_COMPLETED;
-        return new ProductionCapacityDecision(eventType, orderId, requested, completed, backlog, workforcePayload);
+        EventType eventType = backlog > 0 ? EventType.PRODUCTION_DELAYED : EventType.PRODUCTION_COMPLETED;
+        return new ProductionCapacityDecision(eventType, orderId, requested, completed, backlog,
+                material.used(), quality.used(), qualityShortfall, maintenanceRequired, maintenance.used(),
+                maintenanceBlocked, Boolean.TRUE.equals(workforcePayload.get("dispatchAllowed")), workforcePayload);
     }
 
     public WorkforceSummary workforceSummary() {
@@ -417,6 +438,26 @@ public class WorkforceService {
         return "NONE";
     }
 
+    private String bottleneckForRuntime(CapacityUse production, CapacityUse material, CapacityUse quality,
+                                        CapacityUse maintenance, boolean maintenanceBlocked) {
+        if (maintenanceBlocked) {
+            return WorkforceRole.MAINTENANCE_ENGINEER.name();
+        }
+        if (production.remaining() == 0 && production.used() > 0) {
+            return WorkforceRole.PRODUCTION_OPERATOR.name();
+        }
+        if (material.remaining() == 0 && material.used() < production.used()) {
+            return WorkforceRole.MATERIAL_HANDLER.name();
+        }
+        if (quality.remaining() == 0 && quality.used() < material.used()) {
+            return WorkforceRole.QUALITY_INSPECTOR.name();
+        }
+        if (maintenance.remaining() == 0 && maintenance.used() == 0) {
+            return WorkforceRole.MAINTENANCE_ENGINEER.name();
+        }
+        return bottleneckRole();
+    }
+
     private int activeWorkers(WorkforceRole role) {
         return activeAllocations().stream()
                 .filter(allocation -> allocation.role() == role)
@@ -452,6 +493,10 @@ public class WorkforceService {
         }
     }
 
+    private boolean booleanValue(Object value) {
+        return value instanceof Boolean bool ? bool : value != null && Boolean.parseBoolean(value.toString());
+    }
+
     private String write(Map<String, Object> payload) {
         try {
             return mapper.writeValueAsString(payload == null ? Map.of() : payload);
@@ -482,6 +527,13 @@ public class WorkforceService {
             int requestedQuantity,
             int completedQuantity,
             int backlogQuantity,
+            int materialConsumed,
+            int qualityInspected,
+            int qualityDefects,
+            boolean maintenanceRequired,
+            int maintenanceCompleted,
+            boolean maintenanceBlocked,
+            boolean dispatchAllowed,
             Map<String, Object> workforcePayload
     ) {
     }

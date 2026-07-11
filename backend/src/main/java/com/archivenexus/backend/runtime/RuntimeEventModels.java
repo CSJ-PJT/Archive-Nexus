@@ -11,17 +11,25 @@ public final class RuntimeEventModels {
 
     public record RuntimeEventResponse(
             String eventId,
+            String idempotencyKey,
             String sourceService,
+            String targetService,
             String domain,
             String eventType,
             String entityType,
             String entityId,
+            String orderId,
             String correlationId,
             String causationId,
+            String simulationRunId,
+            String settlementCycleId,
+            String workdayId,
             String status,
             String severity,
             String displayLabel,
             Instant occurredAt,
+            int hopCount,
+            int maxHop,
             Map<String, Object> metadata
     ) {
     }
@@ -38,6 +46,7 @@ public final class RuntimeEventModels {
             long marketOriginEvents,
             OutboxOperationsSummary outbox,
             EconomyOperationsSummary economy,
+            ProductionOperationsSummary production,
             WorkforceOperationsSummary workforce,
             RuntimeStatusResponse runtime,
             String degradedReason,
@@ -59,7 +68,35 @@ public final class RuntimeEventModels {
             BigDecimal revenue,
             BigDecimal cost,
             BigDecimal profit,
-            String status
+            String status,
+            BigDecimal manufacturingRevenue,
+            BigDecimal materialCost,
+            BigDecimal maintenanceCost,
+            BigDecimal qualityLossCost,
+            BigDecimal logisticsFee,
+            BigDecimal workforceCost,
+            BigDecimal operatingProfit,
+            BigDecimal operatingMargin,
+            BigDecimal cashBalance,
+            BigDecimal qualityDefectRate,
+            BigDecimal downtimeRate,
+            int negativeProfitStreak,
+            boolean available,
+            String reason,
+            BigDecimal totalCost
+    ) {
+    }
+
+    public record ProductionOperationsSummary(
+            boolean available,
+            String reason,
+            Integer requested,
+            Integer completed,
+            Integer backlog,
+            BigDecimal capacityUtilization,
+            String bottleneckRole,
+            BigDecimal qualityDefectRate,
+            BigDecimal downtimeRate
     ) {
     }
 
@@ -69,6 +106,7 @@ public final class RuntimeEventModels {
             Integer usedCapacity,
             Integer backlog,
             BigDecimal productivityRate,
+            BigDecimal capacityUtilization,
             String bottleneckRole
     ) {
     }
@@ -83,6 +121,9 @@ public final class RuntimeEventModels {
             int eventsProducedLastTick,
             int eventsConsumedLastTick,
             int backlogCount,
+            Long oldestBacklogAgeSeconds,
+            String latestCursor,
+            String degradedReason,
             String pipelineStatus,
             Instant generatedAt
     ) {

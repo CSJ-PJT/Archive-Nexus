@@ -123,14 +123,14 @@ class MarketEventApiTest {
     }
 
     @Test
-    void productionRequestedMapsToProductionCompletedOutboxEvent() throws Exception {
+    void productionRequestedRunsMaterialQualityProductionAndDispatchChain() throws Exception {
         MarketEventRequest request = productionRequestedRequest();
         mvc.perform(post("/api/events/market")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(eventJson(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.eventType").value("PRODUCTION_REQUESTED"))
-                .andExpect(jsonPath("$.outboxEventsGenerated").value(1))
+                .andExpect(jsonPath("$.outboxEventsGenerated").value(4))
                 .andExpect(jsonPath("$.status").value("PROCESSED"))
                 .andExpect(jsonPath("$.emittedOutboxEventIds").isArray())
                 .andExpect(jsonPath("$.emittedOutboxEventIds[0]").isNotEmpty());
@@ -152,6 +152,9 @@ class MarketEventApiTest {
         assertThat(payload.get("totalAmount")).isEqualTo(1200000);
         assertThat(payload.get("marketPayload")).isInstanceOf(Map.class);
         assertThat(((Map<String, Object>) payload.get("marketPayload")).get("orderId")).isEqualTo("ORD-1001");
+        org.mockito.Mockito.verify(outbox).emit(eq(EventType.MATERIAL_CONSUMED), anyString(), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
+        org.mockito.Mockito.verify(outbox).emit(eq(EventType.QUALITY_INSPECTION_COMPLETED), anyString(), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
+        org.mockito.Mockito.verify(outbox).emit(eq(EventType.LOGISTICS_DISPATCHED), eq("MarketShipment"), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
     }
 
     @Test

@@ -90,6 +90,12 @@ public class OutboxEventService {
         return emit(type, aggregateType, aggregateId, idempotencyKey, payload, occurredAt, "Archive-Nexus");
     }
 
+    /** Terminal order events use this guard so a replayed Market request cannot complete the same order twice. */
+    public boolean hasEventForAggregate(EventType type, String aggregateId) {
+        return aggregateId != null && !aggregateId.isBlank()
+                && repository.existsByEventTypeAndAggregateId(type, aggregateId);
+    }
+
     @Transactional
     public Optional<OutboxEventResponse> emit(EventType type, String aggregateType, String aggregateId,
                                              String idempotencyKey, Map<String, Object> payload, Instant occurredAt,

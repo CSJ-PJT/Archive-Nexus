@@ -50,6 +50,7 @@ public class OutboxRoutingPolicy {
         if (eventType == EventType.SHIPMENT_HOLD_CREATED
                 || eventType == EventType.PRODUCTION_DELAYED
                 || eventType == EventType.BACKLOG_INCREASED
+                || eventType == EventType.QUALITY_INSPECTION_COMPLETED
                 || eventType == EventType.MAINTENANCE_REQUIRED) {
             return new OutboxTarget(OutboxTargetService.NONE, RoutingStatus.ROUTE_SKIPPED,
                     "operational state event is not a confirmed external cost event");

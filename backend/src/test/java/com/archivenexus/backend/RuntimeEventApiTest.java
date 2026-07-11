@@ -74,10 +74,20 @@ class RuntimeEventApiTest {
         mvc.perform(get("/api/runtime-events/recent").param("limit", "20"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].eventId").exists())
+                .andExpect(jsonPath("$[0].idempotencyKey").exists())
                 .andExpect(jsonPath("$[0].sourceService").exists())
+                .andExpect(jsonPath("$[0].targetService").exists())
                 .andExpect(jsonPath("$[0].eventType").exists())
+                .andExpect(jsonPath("$[0].hopCount").exists())
                 .andExpect(jsonPath("$[0].status").exists())
-                .andExpect(jsonPath("$[0].metadata").exists());
+                .andExpect(jsonPath("$[0].metadata").exists())
+                .andExpect(jsonPath("$[?(@.simulationRunId=='SIM-RUNTIME')]").exists());
+
+        mvc.perform(get("/api/runtime-events/recent")
+                        .param("after", "0|bootstrap")
+                        .param("limit", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].eventId").exists());
 
         mvc.perform(get("/api/runtime-events/correlation/CORR-RUNTIME-001"))
                 .andExpect(status().isOk())
@@ -103,9 +113,15 @@ class RuntimeEventApiTest {
                 .andExpect(jsonPath("$.outbox.published").exists())
                 .andExpect(jsonPath("$.outbox.failed").exists())
                 .andExpect(jsonPath("$.outbox.retry").exists())
+                .andExpect(jsonPath("$.economy.manufacturingRevenue").exists())
+                .andExpect(jsonPath("$.economy.materialCost").exists())
+                .andExpect(jsonPath("$.economy.operatingMargin").exists())
+                .andExpect(jsonPath("$.economy.cashBalance").exists())
+                .andExpect(jsonPath("$.economy.negativeProfitStreak").exists())
                 .andExpect(jsonPath("$.workforce.totalHeadcount").exists())
                 .andExpect(jsonPath("$.workforce.effectiveCapacity").exists())
                 .andExpect(jsonPath("$.workforce.usedCapacity").exists())
+                .andExpect(jsonPath("$.workforce.capacityUtilization").exists())
                 .andExpect(jsonPath("$.workforce.bottleneckRole").exists())
                 .andExpect(jsonPath("$.liveFlowAvailable").value(true));
     }

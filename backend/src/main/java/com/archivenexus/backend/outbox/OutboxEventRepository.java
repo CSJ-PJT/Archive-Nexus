@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, Long> {
     Optional<OutboxEventEntity> findByEventId(String eventId);
     boolean existsByIdempotencyKey(String idempotencyKey);
+    boolean existsByEventTypeAndAggregateId(OutboxModels.EventType eventType, String aggregateId);
     List<OutboxEventEntity> findAllByOrderByCreatedAtDesc(Pageable pageable);
     List<OutboxEventEntity> findAllByStatusInOrderByCreatedAtAsc(Collection<OutboxStatus> statuses, Pageable pageable);
     List<OutboxEventEntity> findAllByStatusInAndTargetServiceOrderByCreatedAtAsc(Collection<OutboxStatus> statuses, OutboxTargetService targetService, Pageable pageable);

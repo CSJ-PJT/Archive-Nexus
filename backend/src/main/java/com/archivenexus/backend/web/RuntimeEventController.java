@@ -20,8 +20,9 @@ public class RuntimeEventController {
     }
 
     @GetMapping("/api/runtime-events/recent")
-    List<RuntimeEventResponse> recent(@RequestParam(defaultValue = "100") int limit) {
-        return runtimeEvents.recent(limit);
+    List<RuntimeEventResponse> recent(@RequestParam(defaultValue = "100") int limit,
+                                      @RequestParam(required = false) String after) {
+        return runtimeEvents.recent(limit, after);
     }
 
     @GetMapping("/api/runtime-events/correlation/{correlationId}")

@@ -20,9 +20,11 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +62,14 @@ public class RuntimeEventService {
     }
 
     public List<RuntimeEventResponse> recent(int limit) {
+        return recent(limit, null);
+    }
+
+    /**
+     * Cursor polling is pull-only. A cursor is the last event's
+     * {@code occurredAtEpochMillis|eventId}; it never creates runtime work.
+     */
+    public List<RuntimeEventResponse> recent(int limit, String after) {
         int safeLimit = safeLimit(limit);
         List<RuntimeEventResponse> events = new ArrayList<>();
         outbox.events(Math.min(1000, Math.max(safeLimit, 100))).stream()
@@ -74,8 +84,12 @@ public class RuntimeEventService {
         workdayResults.findAllByOrderByCreatedAtDesc(PageRequest.of(0, Math.min(500, Math.max(safeLimit, 100)))).stream()
                 .flatMap(result -> fromWorkday(result).stream())
                 .forEach(events::add);
+        RuntimeCursor afterCursor = runtimeCursor(after);
+        HashSet<String> seenEventIds = new HashSet<>();
         return events.stream()
                 .sorted(Comparator.comparing(RuntimeEventResponse::occurredAt, Comparator.nullsLast(Comparator.naturalOrder())).reversed())
+                .filter(event -> isAfterCursor(event, afterCursor))
+                .filter(event -> seenEventIds.add(event.eventId()))
                 .limit(safeLimit)
                 .toList();
     }
@@ -146,6 +160,7 @@ public class RuntimeEventService {
         String degradedReason = failed > 0
                 ? "Outbox has failed events"
                 : retry > 0 ? "Outbox has retrying events" : null;
+        EconomyOperationsSummary economy = economySummary(workforceSummary, latestWorkday);
         return new OperationsSummaryResponse(
                 SERVICE_NAME,
                 SERVICE_ROLE,
@@ -157,16 +172,18 @@ public class RuntimeEventService {
                 latestWorkday == null ? 0 : latestWorkday.qualityDefects(),
                 marketEvents.count(),
                 new OutboxOperationsSummary(outboxSummary.pending(), outboxSummary.published(), failed, retry),
-                new EconomyOperationsSummary(BigDecimal.ZERO, workforceSummary.payrollCost(), BigDecimal.ZERO.subtract(workforceSummary.payrollCost()), "SYNTHETIC_WORKFORCE_COST_ONLY"),
+                economy,
+                productionSummary(latestWorkday, workforceSummary, economy),
                 new WorkforceOperationsSummary(
                         workforceSummary.totalActiveWorkers(),
                         workforceSummary.estimatedDailyCapacity(),
                         workforceSummary.usedCapacity(),
                         workforceSummary.backlog(),
                         workforceSummary.productivityRate(),
+                        percent(workforceSummary.usedCapacity(), workforceSummary.estimatedDailyCapacity()),
                         workforceSummary.bottleneckRole()
                 ),
-                runtimeWorkLoop.status(),
+                runtimeStatus(),
                 degradedReason,
                 true,
                 List.of(
@@ -186,7 +203,91 @@ public class RuntimeEventService {
     }
 
     public RuntimeStatusResponse runtimeStatus() {
-        return runtimeWorkLoop.status();
+        RuntimeStatusResponse current = runtimeWorkLoop.status();
+        RuntimeEventResponse latest = recent(1).stream().findFirst().orElse(null);
+        if (latest == null || latest.occurredAt() == null) {
+            return current;
+        }
+        return new RuntimeStatusResponse(
+                current.service(), current.runtimeActive(), current.autoRunEnabled(), current.schedulerStatus(),
+                current.lastWorkAt(), latest.occurredAt(), current.eventsProducedLastTick(), current.eventsConsumedLastTick(),
+                current.backlogCount(), current.oldestBacklogAgeSeconds(), cursorFor(latest), current.degradedReason(),
+                current.pipelineStatus(), current.generatedAt());
+    }
+
+    /**
+     * Synthetic operating balance derived only from persisted Nexus outbox and workforce data.
+     * It is a runtime estimate, never a real financial statement or customer transaction record.
+     */
+    private EconomyOperationsSummary economySummary(WorkforceSummary workforceSummary, WorkdayResultEntity latestWorkday) {
+        BigDecimal manufacturingRevenue = BigDecimal.ZERO;
+        BigDecimal materialCost = BigDecimal.ZERO;
+        BigDecimal maintenanceCost = BigDecimal.ZERO;
+        BigDecimal qualityLossCost = BigDecimal.ZERO;
+        BigDecimal logisticsFee = BigDecimal.ZERO;
+        long productionEvents = 0;
+        long maintenanceRequired = 0;
+        long qualityDefects = 0;
+
+        for (OutboxEventResponse event : outbox.events(1000)) {
+            Map<String, Object> payload = event.payload() == null ? Map.of() : event.payload();
+            switch (event.eventType()) {
+                case PRODUCTION_COMPLETED -> {
+                    productionEvents++;
+                    manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"),
+                            BigDecimal.valueOf(number(payload.get("productionCompleted"), number(payload.get("quantity"), 0)))
+                                    .multiply(BigDecimal.valueOf(120_000))));
+                }
+                case MATERIAL_CONSUMED -> materialCost = materialCost.add(money(payload.get("estimatedCost"),
+                        BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
+                                .multiply(BigDecimal.valueOf(950))));
+                case MAINTENANCE_COMPLETED -> maintenanceCost = maintenanceCost.add(money(payload.get("estimatedCost"), BigDecimal.valueOf(350_000)));
+                case MAINTENANCE_REQUIRED -> maintenanceRequired++;
+                case QUALITY_DEFECT_DETECTED, QUALITY_CLAIM_CHARGED -> {
+                    qualityDefects++;
+                    qualityLossCost = qualityLossCost.add(money(payload.get("estimatedCost"),
+                            BigDecimal.valueOf(number(payload.get("qualityDefects"), 1)).multiply(BigDecimal.valueOf(25_000))));
+                }
+                case LOGISTICS_DISPATCHED -> logisticsFee = logisticsFee.add(money(payload.get("estimatedCost"),
+                        BigDecimal.valueOf(number(payload.get("quantity"), 0)).multiply(BigDecimal.valueOf(2_500))));
+                default -> { }
+            }
+        }
+        boolean available = productionEvents > 0 || latestWorkday != null;
+        if (!available) {
+            return new EconomyOperationsSummary(null, null, null, "NO_DATA",
+                    null, null, null, null, null, null, null, null, null, null, null, 0,
+                    false, "No persisted synthetic manufacturing work has been completed yet", null);
+        }
+        BigDecimal workforceCost = workforceSummary.payrollCost();
+        BigDecimal totalCost = materialCost.add(maintenanceCost).add(qualityLossCost).add(logisticsFee).add(workforceCost);
+        BigDecimal operatingProfit = manufacturingRevenue.subtract(totalCost);
+        int requested = latestWorkday == null ? 0 : latestWorkday.productionRequested();
+        int defects = latestWorkday == null ? (int) qualityDefects : latestWorkday.qualityDefects();
+        BigDecimal qualityDefectRate = percent(defects, Math.max(1, requested));
+        BigDecimal downtimeRate = percent(maintenanceRequired, Math.max(1L, productionEvents + maintenanceRequired));
+        return new EconomyOperationsSummary(
+                manufacturingRevenue, totalCost, operatingProfit,
+                "SYNTHETIC_RUNTIME_ESTIMATE",
+                manufacturingRevenue, materialCost, maintenanceCost, qualityLossCost, logisticsFee, workforceCost,
+                operatingProfit, percent(operatingProfit, manufacturingRevenue),
+                operatingProfit, qualityDefectRate, downtimeRate,
+                operatingProfit.signum() < 0 ? 1 : 0,
+                true, null, totalCost
+        );
+    }
+
+    private ProductionOperationsSummary productionSummary(WorkdayResultEntity latestWorkday,
+                                                          WorkforceSummary workforceSummary,
+                                                          EconomyOperationsSummary economy) {
+        if (latestWorkday == null) {
+            return new ProductionOperationsSummary(false, "No persisted synthetic workday result is available", null,
+                    null, null, null, workforceSummary.bottleneckRole(), null, null);
+        }
+        return new ProductionOperationsSummary(true, null,
+                latestWorkday.productionRequested(), latestWorkday.productionCompleted(), latestWorkday.productionBacklog(),
+                percent(latestWorkday.usedCapacity(), latestWorkday.totalCapacity()), latestWorkday.bottleneckRole(),
+                economy.qualityDefectRate(), economy.downtimeRate());
     }
 
     private RuntimeEventResponse fromOutbox(OutboxEventResponse event) {
@@ -194,17 +295,25 @@ public class RuntimeEventService {
         String entityId = text(event.aggregateId(), entityIdFromPayload(payload));
         return new RuntimeEventResponse(
                 event.eventId(),
+                event.idempotencyKey(),
                 SERVICE_NAME,
+                event.targetService() == null ? null : event.targetService().name(),
                 domainForOutbox(event),
                 event.eventType().name(),
                 entityTypeForAggregate(event.aggregateType()),
                 entityId,
+                text(payload.get("orderId")),
                 text(payload.get("correlationId")),
                 text(payload.get("causationId")),
+                text(payload.get("simulationRunId")),
+                text(payload.get("settlementCycleId")),
+                text(payload.get("workdayId")),
                 statusForOutbox(event.status()),
                 severityForOutbox(event, payload),
                 labelForOutbox(event),
                 event.occurredAt(),
+                number(payload.get("hopCount"), 0),
+                number(payload.get("maxHop"), 5),
                 metadataForOutbox(event, payload)
         );
     }
@@ -219,33 +328,49 @@ public class RuntimeEventService {
         List<RuntimeEventResponse> projections = new ArrayList<>();
         projections.add(new RuntimeEventResponse(
                 event.eventId(),
+                event.idempotencyKey(),
                 text(event.source(), "Archive-Market"),
+                SERVICE_NAME,
                 "market",
                 projectedEventType,
                 entityTypeForMarket(event.eventType().name()),
                 entityId,
+                text(payload.get("orderId")),
                 event.correlationId(),
                 event.causationId(),
+                event.simulationRunId(),
+                event.settlementCycleId(),
+                text(payload.get("workdayId")),
                 statusForMarket(event.processingStatus()),
                 severityForMarket(event.processingStatus(), payload),
                 projectedEventType + " was " + event.processingStatus().name().toLowerCase(),
                 event.occurredAt(),
+                event.hopCount(),
+                event.maxHop(),
                 metadataForMarket(event, payload)
         ));
         if ("PRODUCTION_REQUESTED".equals(event.eventType().name()) && event.processingStatus() == MarketEventStatus.PROCESSED) {
             projections.add(new RuntimeEventResponse(
                     event.eventId() + ":PRODUCTION_STARTED",
+                    event.idempotencyKey() + ":PRODUCTION_STARTED",
+                    SERVICE_NAME,
                     SERVICE_NAME,
                     "production",
                     "PRODUCTION_STARTED",
                     "production-order",
                     entityId,
+                    text(payload.get("orderId")),
                     event.correlationId(),
                     event.causationId(),
-                    "moving",
-                    "info",
+                    event.simulationRunId(),
+                    event.settlementCycleId(),
+                    text(payload.get("workdayId")),
+                    "PROCESSING",
+                    "INFO",
                     "Production started from Market request",
                     event.occurredAt() == null ? event.receivedAt() : event.occurredAt().plusMillis(1),
+                    event.hopCount(),
+                    event.maxHop(),
                     metadataForMarket(event, payload)
             ));
         }
@@ -267,17 +392,25 @@ public class RuntimeEventService {
         boolean active = "ACTIVE".equals(event.status().name());
         return new RuntimeEventResponse(
                 event.eventId(),
+                event.idempotencyKey(),
                 text(event.sourceService(), SERVICE_NAME),
+                text(event.targetService(), SERVICE_NAME),
                 "workforce",
                 "WORKFORCE_ALLOCATION_ASSIGNED",
                 "workforce-allocation",
                 event.allocationId(),
+                null,
                 event.correlationId(),
                 event.causationId(),
-                active ? "completed" : "rejected",
-                active ? "info" : "warning",
+                event.simulationRunId(),
+                event.settlementCycleId(),
+                event.workdayId(),
+                active ? "COMPLETED" : "FAILED",
+                active ? "INFO" : "WARNING",
                 "Workforce allocation assigned to " + event.roleType(),
                 event.createdAt(),
+                event.hopCount(),
+                event.maxHop(),
                 metadata
         );
     }
@@ -299,33 +432,49 @@ public class RuntimeEventService {
         List<RuntimeEventResponse> projections = new ArrayList<>();
         projections.add(new RuntimeEventResponse(
                 result.workdayId() + ":WORKDAY_COMPLETED",
+                result.workdayId() + ":WORKDAY_COMPLETED",
+                SERVICE_NAME,
                 SERVICE_NAME,
                 "workforce",
                 "WORKDAY_COMPLETED",
                 "workday",
                 result.workdayId(),
+                null,
                 text(evidence.get("correlationId")),
                 text(evidence.get("causationId")),
-                "completed",
-                result.productionBacklog() > 0 ? "warning" : "info",
+                text(evidence.get("simulationRunId")),
+                text(evidence.get("settlementCycleId")),
+                result.workdayId(),
+                "COMPLETED",
+                result.productionBacklog() > 0 ? "WARNING" : "INFO",
                 "Workday completed with " + result.productionCompleted() + " production units",
                 result.createdAt(),
+                number(evidence.get("hopCount"), 0),
+                number(evidence.get("maxHop"), 5),
                 metadata
         ));
         if (result.productionBacklog() > 0) {
             projections.add(new RuntimeEventResponse(
                     result.workdayId() + ":CAPACITY_SHORTAGE_DETECTED",
+                    result.workdayId() + ":CAPACITY_SHORTAGE_DETECTED",
+                    SERVICE_NAME,
                     SERVICE_NAME,
                     "workforce",
                     "CAPACITY_SHORTAGE_DETECTED",
                     "workday",
                     result.workdayId(),
+                    null,
                     text(evidence.get("correlationId")),
                     text(evidence.get("causationId")),
-                    "delayed",
-                    "warning",
+                    text(evidence.get("simulationRunId")),
+                    text(evidence.get("settlementCycleId")),
+                    result.workdayId(),
+                    "DELAYED",
+                    "WARNING",
                     "Capacity shortage detected at " + result.bottleneckRole(),
                     result.createdAt().plusMillis(1),
+                    number(evidence.get("hopCount"), 0),
+                    number(evidence.get("maxHop"), 5),
                     metadata
             ));
         }
@@ -418,52 +567,51 @@ public class RuntimeEventService {
 
     private String statusForOutbox(OutboxStatus status) {
         if (status == null) {
-            return "waiting";
+            return "WAITING";
         }
         return switch (status) {
-            case PENDING -> "waiting";
-            case PENDING_RETRY -> "delayed";
-            case FAILED -> "failed";
-            case SKIPPED -> "completed";
-            case PUBLISHED -> "completed";
+            case PENDING -> "WAITING";
+            case PENDING_RETRY -> "DELAYED";
+            case FAILED -> "FAILED";
+            case SKIPPED -> "COMPLETED";
+            case PUBLISHED -> "COMPLETED";
         };
     }
 
     private String statusForMarket(MarketEventStatus status) {
         if (status == null) {
-            return "waiting";
+            return "WAITING";
         }
         return switch (status) {
-            case RECEIVED -> "created";
-            case PROCESSED -> "completed";
-            case DUPLICATE -> "completed";
-            case REJECTED, FAILED -> "failed";
+            case RECEIVED -> "CREATED";
+            case PROCESSED, DUPLICATE -> "COMPLETED";
+            case REJECTED, FAILED -> "FAILED";
         };
     }
 
     private String severityForOutbox(OutboxEventResponse event, Map<String, Object> payload) {
         if (event.status() == OutboxStatus.FAILED) {
-            return "critical";
+            return "CRITICAL";
         }
         if (event.status() == OutboxStatus.PENDING_RETRY) {
-            return "warning";
+            return "WARNING";
         }
         Object severity = payload.get("severity");
         if (severity != null && List.of("HIGH", "CRITICAL").contains(severity.toString().toUpperCase())) {
-            return "warning";
+            return "WARNING";
         }
-        return "info";
+        return "INFO";
     }
 
     private String severityForMarket(MarketEventStatus status, Map<String, Object> payload) {
         if (status == MarketEventStatus.FAILED || status == MarketEventStatus.REJECTED) {
-            return "warning";
+            return "WARNING";
         }
         Object risk = payload.get("riskLevel");
         if (risk != null && List.of("HIGH", "CRITICAL").contains(risk.toString().toUpperCase())) {
-            return "warning";
+            return "WARNING";
         }
-        return "info";
+        return "INFO";
     }
 
     private String labelForOutbox(OutboxEventResponse event) {
@@ -496,6 +644,81 @@ public class RuntimeEventService {
 
     private static int safeLimit(int limit) {
         return Math.max(1, Math.min(limit <= 0 ? 100 : limit, 500));
+    }
+
+    private static int number(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return value == null ? fallback : Integer.parseInt(value.toString());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private static BigDecimal money(Object value, BigDecimal fallback) {
+        if (value instanceof BigDecimal amount) {
+            return amount.max(BigDecimal.ZERO);
+        }
+        try {
+            return value == null ? fallback : new BigDecimal(value.toString()).max(BigDecimal.ZERO);
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private static BigDecimal ratio(long numerator, long denominator) {
+        if (denominator <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return BigDecimal.valueOf(numerator).divide(BigDecimal.valueOf(denominator), 4, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal ratio(BigDecimal numerator, BigDecimal denominator) {
+        if (denominator == null || denominator.signum() <= 0) {
+            return BigDecimal.ZERO;
+        }
+        return (numerator == null ? BigDecimal.ZERO : numerator)
+                .divide(denominator, 4, RoundingMode.HALF_UP);
+    }
+
+    private static BigDecimal percent(long numerator, long denominator) {
+        return ratio(numerator, denominator).multiply(BigDecimal.valueOf(100));
+    }
+
+    private static BigDecimal percent(BigDecimal numerator, BigDecimal denominator) {
+        return ratio(numerator, denominator).multiply(BigDecimal.valueOf(100));
+    }
+
+    private static String cursorFor(RuntimeEventResponse event) {
+        return event.occurredAt().toEpochMilli() + "|" + event.eventId();
+    }
+
+    private static boolean isAfterCursor(RuntimeEventResponse event, RuntimeCursor cursor) {
+        if (cursor == null) {
+            return true;
+        }
+        if (event.occurredAt() == null) {
+            return false;
+        }
+        int timeComparison = event.occurredAt().compareTo(cursor.occurredAt());
+        return timeComparison > 0 || (timeComparison == 0 && event.eventId().compareTo(cursor.eventId()) > 0);
+    }
+
+    private static RuntimeCursor runtimeCursor(String cursor) {
+        if (cursor == null || cursor.isBlank()) {
+            return null;
+        }
+        try {
+            String[] parts = cursor.trim().split("\\|", 2);
+            return new RuntimeCursor(Instant.ofEpochMilli(Long.parseLong(parts[0])), parts.length == 2 ? parts[1] : "");
+        } catch (RuntimeException ignored) {
+            return null;
+        }
+    }
+
+    private record RuntimeCursor(Instant occurredAt, String eventId) {
     }
 
     private static String text(Object value) {

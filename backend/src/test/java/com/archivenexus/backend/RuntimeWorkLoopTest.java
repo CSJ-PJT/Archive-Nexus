@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "archive.integrations.logitics.enabled=false",
         "archive.integrations.ledger.enabled=false",
         "archive.integrations.market.enabled=false",
+        "archive-nexus.archiveos.base-url=http://127.0.0.1:1",
         "archive.runtime.autorun.enabled=true",
         "archive.runtime.tick-interval=1h",
         "archive.runtime.max-events-per-tick=2",
@@ -64,7 +65,7 @@ class RuntimeWorkLoopTest {
         assertThat(first.eventsProducedLastTick()).isBetween(1, 2);
         assertThat(first.eventsConsumedLastTick()).isBetween(1, 2);
         assertThat(marketEvents.count() - initialMarketCount).isEqualTo(first.eventsProducedLastTick());
-        assertThat(outboxEvents.count() - initialOutboxCount).isLessThanOrEqualTo(2);
+        assertThat(outboxEvents.count() - initialOutboxCount).isLessThanOrEqualTo(5);
 
         long marketCount = marketEvents.count();
         long outboxCount = outboxEvents.count();
@@ -88,6 +89,7 @@ class RuntimeWorkLoopTest {
                 .andExpect(jsonPath("$.autoRunEnabled").value(true))
                 .andExpect(jsonPath("$.lastWorkAt").exists())
                 .andExpect(jsonPath("$.lastEventAt").exists())
+                .andExpect(jsonPath("$.latestCursor").exists())
                 .andExpect(jsonPath("$.pipelineStatus").value("LIVE"));
 
         mvc.perform(get("/api/operations/summary"))
