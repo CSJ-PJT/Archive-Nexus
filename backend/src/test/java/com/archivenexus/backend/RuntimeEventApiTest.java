@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -118,6 +119,11 @@ class RuntimeEventApiTest {
                 .andExpect(jsonPath("$.economy.operatingMargin").exists())
                 .andExpect(jsonPath("$.economy.cashBalance").exists())
                 .andExpect(jsonPath("$.economy.negativeProfitStreak").exists())
+                .andExpect(jsonPath("$.economy.calculationScope").exists())
+                .andExpect(jsonPath("$.economy.calculatedAt").exists())
+                .andExpect(jsonPath("$.production.productionRequested").value(nullValue()))
+                .andExpect(jsonPath("$.production.productionCompleted").value(nullValue()))
+                .andExpect(jsonPath("$.production.productionBacklog").value(nullValue()))
                 .andExpect(jsonPath("$.workforce.totalHeadcount").exists())
                 .andExpect(jsonPath("$.workforce.effectiveCapacity").exists())
                 .andExpect(jsonPath("$.workforce.usedCapacity").exists())

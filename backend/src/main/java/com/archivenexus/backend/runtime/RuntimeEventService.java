@@ -257,7 +257,8 @@ public class RuntimeEventService {
         if (!available) {
             return new EconomyOperationsSummary(null, null, null, "NO_DATA",
                     null, null, null, null, null, null, null, null, null, null, null, 0,
-                    false, "No persisted synthetic manufacturing work has been completed yet", null);
+                    false, "No persisted synthetic manufacturing work has been completed yet", null,
+                    "NO_PERSISTED_MANUFACTURING_WORK", Instant.now());
         }
         BigDecimal workforceCost = workforceSummary.payrollCost();
         BigDecimal totalCost = materialCost.add(maintenanceCost).add(qualityLossCost).add(logisticsFee).add(workforceCost);
@@ -273,7 +274,8 @@ public class RuntimeEventService {
                 operatingProfit, percent(operatingProfit, manufacturingRevenue),
                 operatingProfit, qualityDefectRate, downtimeRate,
                 operatingProfit.signum() < 0 ? 1 : 0,
-                true, null, totalCost
+                true, null, totalCost,
+                "LATEST_1000_PERSISTED_OUTBOX_EVENTS_AND_LATEST_WORKDAY", Instant.now()
         );
     }
 
@@ -282,9 +284,10 @@ public class RuntimeEventService {
                                                           EconomyOperationsSummary economy) {
         if (latestWorkday == null) {
             return new ProductionOperationsSummary(false, "No persisted synthetic workday result is available", null,
-                    null, null, null, workforceSummary.bottleneckRole(), null, null);
+                    null, null, null, null, null, null, workforceSummary.bottleneckRole(), null, null);
         }
         return new ProductionOperationsSummary(true, null,
+                latestWorkday.productionRequested(), latestWorkday.productionCompleted(), latestWorkday.productionBacklog(),
                 latestWorkday.productionRequested(), latestWorkday.productionCompleted(), latestWorkday.productionBacklog(),
                 percent(latestWorkday.usedCapacity(), latestWorkday.totalCapacity()), latestWorkday.bottleneckRole(),
                 economy.qualityDefectRate(), economy.downtimeRate());

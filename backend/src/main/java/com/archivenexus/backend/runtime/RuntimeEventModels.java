@@ -83,7 +83,9 @@ public final class RuntimeEventModels {
             int negativeProfitStreak,
             boolean available,
             String reason,
-            BigDecimal totalCost
+            BigDecimal totalCost,
+            String calculationScope,
+            Instant calculatedAt
     ) {
     }
 
@@ -93,6 +95,9 @@ public final class RuntimeEventModels {
             Integer requested,
             Integer completed,
             Integer backlog,
+            Integer productionRequested,
+            Integer productionCompleted,
+            Integer productionBacklog,
             BigDecimal capacityUtilization,
             String bottleneckRole,
             BigDecimal qualityDefectRate,
