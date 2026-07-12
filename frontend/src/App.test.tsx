@@ -73,7 +73,7 @@ describe('App', () => {
   it('renders Archive Nexus control surface', async () => {
     renderApp();
     expect(await screen.findByText('Archive Nexus')).toBeInTheDocument();
-    expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('대시보드').length).toBeGreaterThan(0);
     expect(await screen.findByText('공장 운영 현황')).toBeInTheDocument();
     expect(await screen.findByText('ArchiveOS DEGRADED')).toBeInTheDocument();
   });
@@ -120,7 +120,7 @@ describe('App', () => {
     renderApp();
     const languageSelect = await screen.findByLabelText('표시 언어');
     fireEvent.change(languageSelect, { target: { value: 'zh-CN' } });
-    expect(await screen.findByRole('button', { name: '概览' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '仪表盘' })).toBeInTheDocument();
     expect(window.localStorage.getItem('archive.locale')).toBe('zh-CN');
   });
 });

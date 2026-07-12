@@ -208,6 +208,36 @@ export type SimulatorPersistenceStatus = {
   restoredFrom: string;
 };
 
+export type OperationsSummary = {
+  serviceName: string;
+  status: string;
+  latestEventAt: string | null;
+  outbox: { pending: number; published: number; failed: number; retry: number };
+  economy: {
+    available: boolean;
+    manufacturingRevenue: number | null;
+    totalCost: number | null;
+    operatingProfit: number | null;
+    operatingMargin: number | null;
+    cashBalance: number | null;
+    calculationScope?: string | null;
+  };
+  production: {
+    available: boolean;
+    requested: number | null;
+    completed: number | null;
+    backlog: number | null;
+    productionRequested?: number | null;
+    productionCompleted?: number | null;
+    productionBacklog?: number | null;
+    capacityUtilization: number | null;
+    bottleneckRole: string | null;
+    qualityDefectRate: number | null;
+  };
+  workforce: { totalHeadcount: number; effectiveCapacity: number; usedCapacity: number; backlog: number; capacityUtilization: number; bottleneckRole: string | null };
+  runtime: { runtimeActive: boolean; schedulerStatus: string; pipelineStatus: string; latestCursor: string | null; eventsProducedLastTick: number; eventsConsumedLastTick: number };
+};
+
 export type PlatformManifest = {
   product: string;
   displayName: string;

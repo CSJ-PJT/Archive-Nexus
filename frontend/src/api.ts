@@ -3,7 +3,7 @@ import type {
   AiDashboardSummary, AiQueryRequest, AiQueryResponse, ArchiveOsInteraction, ArchiveOsStatus, BatchSnapshot, Factory, FactoryAlert, InventoryItem,
   InventoryTransaction, LogisticsShipment, MaintenanceEvent, Overview,
   CreateNexusTask, FactoryControlRequest, FactoryMutationResponse, NexusTask, NexusTaskLog, ProductionOrder, QualityInspection, RpaTask, SimulatorPersistenceStatus,
-  SimulatorStatus, PlatformManifest
+  SimulatorStatus, PlatformManifest, OperationsSummary
 } from './types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
@@ -53,6 +53,7 @@ export const api = {
   archiveOsInteractions: () => request<ArchiveOsInteraction[]>('/api/archiveos/interactions?limit=100'),
   archiveOsStatus: () => request<ArchiveOsStatus>('/api/archiveos/status'),
   platformManifest: () => request<PlatformManifest>('/api/platform/manifest'),
+  operationsSummary: () => request<OperationsSummary>('/api/operations/summary'),
   aiQuery: (body: AiQueryRequest) => request<AiQueryResponse>('/api/ai/query', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
   }),
@@ -60,4 +61,3 @@ export const api = {
   aiQueryDetail: (id: string) => request<AiQueryResponse>(`/api/ai/queries/${id}`),
   aiSummary: () => request<AiDashboardSummary>('/api/ai/summary')
 };
-
