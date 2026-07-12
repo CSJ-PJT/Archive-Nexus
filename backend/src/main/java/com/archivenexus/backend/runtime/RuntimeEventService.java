@@ -3,6 +3,7 @@ package com.archivenexus.backend.runtime;
 import com.archivenexus.backend.market.MarketInboundEventEntity;
 import com.archivenexus.backend.market.MarketInboundEventRepository;
 import com.archivenexus.backend.market.MarketEventModels.MarketEventStatus;
+import com.archivenexus.backend.market.MarketEventModels.MarketEventType;
 import com.archivenexus.backend.outbox.OutboxEventService;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxEventResponse;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxStatus;
@@ -295,7 +296,7 @@ public class RuntimeEventService {
 
     private RuntimeEventResponse fromOutbox(OutboxEventResponse event) {
         Map<String, Object> payload = event.payload() == null ? Map.of() : event.payload();
-        String entityId = text(event.aggregateId(), entityIdFromPayload(payload));
+        String entityId = text(payload.get("entityId"), text(event.aggregateId(), entityIdFromPayload(payload)));
         return new RuntimeEventResponse(
                 event.eventId(),
                 event.idempotencyKey(),
@@ -323,7 +324,9 @@ public class RuntimeEventService {
 
     private List<RuntimeEventResponse> fromMarket(MarketInboundEventEntity event) {
         Map<String, Object> payload = read(event.payloadJson());
-        String entityId = entityIdFromPayload(payload);
+        String entityId = event.eventType() == MarketEventType.PRODUCTION_REQUESTED
+                ? event.eventId()
+                : entityIdFromPayload(payload);
         String projectedEventType = switch (event.eventType()) {
             case MARKET_ORDER_PLACED -> "MARKET_ORDER_RECEIVED";
             default -> event.eventType().name();
@@ -625,7 +628,7 @@ public class RuntimeEventService {
         if (payload == null || payload.isEmpty()) {
             return null;
         }
-        for (String key : List.of("orderId", "shipmentId", "returnId", "claimId", "factoryId", "equipmentId", "vendorId", "workdayId")) {
+        for (String key : List.of("entityId", "productionRequestId", "orderId", "shipmentId", "returnId", "claimId", "factoryId", "equipmentId", "vendorId", "workdayId")) {
             Object value = payload.get(key);
             if (value != null && !value.toString().isBlank()) {
                 return value.toString();

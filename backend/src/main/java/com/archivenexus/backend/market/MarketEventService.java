@@ -8,6 +8,8 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -20,6 +22,7 @@ import static com.archivenexus.backend.market.MarketEventModels.*;
 
 @Service
 public class MarketEventService {
+    private static final Logger log = LoggerFactory.getLogger(MarketEventService.class);
     private static final int DEFAULT_MAX_HOP = 8;
     private static final String SOURCE_MARKET = "Archive-Market";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
@@ -208,8 +211,15 @@ public class MarketEventService {
     }
 
     private MarketInboundEventRequest toHeader(MarketEventRequest request) {
+        String eventId = textOrDefault(request == null ? null : request.eventId(), "EVT-" + UUID.randomUUID());
+        String inboundCorrelationId = request == null ? null : request.correlationId();
+        String correlationId = inboundCorrelationId;
+        if (correlationId == null || correlationId.isBlank()) {
+            correlationId = "LEGACY-NEXUS-CORR-" + eventId;
+            log.warn("Market event {} has no correlationId; using legacy fallback {}", eventId, correlationId);
+        }
         return new MarketInboundEventRequest(
-                textOrDefault(request == null ? null : request.eventId(), "EVT-" + UUID.randomUUID()),
+                eventId,
                 textOrDefault(request == null ? null : request.idempotencyKey(), "MK-" + UUID.randomUUID()),
                 textOrDefault(request == null ? null : request.source(), SOURCE_MARKET),
                 request == null || request.eventType() == null ? MarketEventType.UNKNOWN : request.eventType(),
@@ -217,7 +227,7 @@ public class MarketEventService {
                 request == null || request.occurredAt() == null ? Instant.now() : request.occurredAt(),
                 request == null ? null : request.simulationRunId(),
                 request == null ? null : request.settlementCycleId(),
-                request == null ? null : request.correlationId(),
+                correlationId,
                 request == null ? null : request.causationId(),
                 request == null || request.hopCount() == null ? 0 : request.hopCount(),
                 request == null || request.maxHop() == null ? DEFAULT_MAX_HOP : request.maxHop()
@@ -231,6 +241,11 @@ public class MarketEventService {
                 WorkforceService.ProductionCapacityDecision decision = workforce.processProductionRequest(safePayload);
                 Map<String, Object> mappedPayload = new LinkedHashMap<>(safePayload);
                 mappedPayload.putAll(decision.workforcePayload());
+                // The Market request is the direct cause of every manufacturing child event.
+                // Keep the inbound correlation unchanged while exposing a stable request/batch entity id.
+                mappedPayload.put("entityId", header.eventId());
+                mappedPayload.put("productionRequestId", header.eventId());
+                mappedPayload.put("causationId", header.eventId());
                 yield manufacturingOutbox(header, mappedPayload, decision);
             }
             case SHIPMENT_REQUESTED -> shipmentOutbox(header, safePayload);
@@ -379,7 +394,9 @@ public class MarketEventService {
         merged.put("simulationRunId", header.simulationRunId());
         merged.put("settlementCycleId", header.settlementCycleId());
         merged.put("correlationId", header.correlationId());
-        merged.put("causationId", header.causationId());
+        merged.put("causationId", payload != null && payload.get("causationId") != null
+                ? payload.get("causationId")
+                : header.causationId());
         merged.put("hopCount", header.hopCount());
         merged.put("maxHop", header.maxHop());
 
@@ -400,6 +417,8 @@ public class MarketEventService {
             merged.put("returnId", payload.get("returnId"));
             merged.put("claimId", payload.get("claimId"));
             merged.put("workdayId", payload.get("workdayId"));
+            merged.put("entityId", payload.get("entityId"));
+            merged.put("productionRequestId", payload.get("productionRequestId"));
             merged.put("workforceAllocationId", payload.get("workforceAllocationId"));
             merged.put("productivityScore", payload.get("productivityScore"));
             merged.put("usedCapacity", payload.get("usedCapacity"));

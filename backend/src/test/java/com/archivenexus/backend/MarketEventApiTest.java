@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atMost;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -155,6 +156,36 @@ class MarketEventApiTest {
         org.mockito.Mockito.verify(outbox).emit(eq(EventType.MATERIAL_CONSUMED), anyString(), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
         org.mockito.Mockito.verify(outbox).emit(eq(EventType.QUALITY_INSPECTION_COMPLETED), anyString(), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
         org.mockito.Mockito.verify(outbox).emit(eq(EventType.LOGISTICS_DISPATCHED), eq("MarketShipment"), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
+
+        ArgumentCaptor<Map<String, Object>> chainPayloadCaptor = ArgumentCaptor.forClass((Class) Map.class);
+        org.mockito.Mockito.verify(outbox, atLeast(4)).emit(
+                any(), anyString(), anyString(), anyString(), chainPayloadCaptor.capture(), any(Instant.class), eq("Archive-Market"));
+        assertThat(chainPayloadCaptor.getAllValues()).allSatisfy(childPayload -> {
+            assertThat(childPayload.get("correlationId")).isEqualTo("corr-1");
+            assertThat(childPayload.get("causationId")).isEqualTo("evt-prod-1");
+            assertThat(childPayload.get("orderId")).isEqualTo("ORD-1001");
+            assertThat(childPayload.get("entityId")).isEqualTo("evt-prod-1");
+        });
+    }
+
+    @Test
+    void missingCorrelationIdUsesExplicitLegacyFallbackOnlyForNewInboundEvents() throws Exception {
+        MarketEventRequest request = productionRequestedRequest();
+        request = new MarketEventRequest(request.eventId(), request.idempotencyKey(), request.source(), request.eventType(),
+                request.schemaVersion(), request.occurredAt(), request.simulationRunId(), request.settlementCycleId(),
+                null, request.causationId(), request.hopCount(), request.maxHop(), request.payload());
+
+        mvc.perform(post("/api/events/market")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(eventJson(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.correlationId").value("LEGACY-NEXUS-CORR-evt-prod-1"));
+
+        ArgumentCaptor<Map<String, Object>> payloadCaptor = ArgumentCaptor.forClass((Class) Map.class);
+        org.mockito.Mockito.verify(outbox, atLeast(4)).emit(
+                any(), anyString(), anyString(), anyString(), payloadCaptor.capture(), any(Instant.class), eq("Archive-Market"));
+        assertThat(payloadCaptor.getAllValues()).allSatisfy(childPayload ->
+                assertThat(childPayload.get("correlationId")).isEqualTo("LEGACY-NEXUS-CORR-evt-prod-1"));
     }
 
     @Test
