@@ -4,6 +4,7 @@ import com.archivenexus.backend.outbox.OutboxModels.*;
 import com.archivenexus.backend.market.MarketInboundEventRepository;
 import com.archivenexus.backend.market.MarketEventModels.MarketEventStatus;
 import com.archivenexus.backend.workforce.WorkforceService;
+import com.archivenexus.backend.archiveos.runtime.ArchiveOsRuntimeDeliveryService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +14,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -61,8 +64,11 @@ public class OutboxEventService {
     private final MarketInboundEventRepository marketInboundEventRepository;
     private final ObjectProvider<WorkforceService> workforceService;
     private final int publishBatchSize;
+    private final int priorityLogisticsBatchSize;
     private final int maxRetryCount;
     private final boolean marketInboundEnabled;
+    private final boolean autoPublishEnabled;
+    private final ObjectProvider<ArchiveOsRuntimeDeliveryService> runtimeDeliveries;
 
     public OutboxEventService(OutboxEventRepository repository,
                               OutboxPublishRouter router,
@@ -71,8 +77,11 @@ public class OutboxEventService {
                               ObjectProvider<WorkforceService> workforceService,
                               ObjectMapper mapper,
                               @Value("${archive.integrations.routing.chunk-size:${archive-nexus.ledger.publish-batch-size:50}}") int publishBatchSize,
+                              @Value("${archive.integrations.routing.priority-logistics-batch-size:5}") int priorityLogisticsBatchSize,
                               @Value("${archive.integrations.routing.max-retry-count:5}") int maxRetryCount,
-                              @Value("${archive.integrations.market.enabled:false}") boolean marketInboundEnabled) {
+                              @Value("${archive.integrations.market.enabled:false}") boolean marketInboundEnabled,
+                              @Value("${archive.integrations.routing.auto-publish-enabled:true}") boolean autoPublishEnabled,
+                              ObjectProvider<ArchiveOsRuntimeDeliveryService> runtimeDeliveries) {
         this.repository = repository;
         this.router = router;
         this.routingPolicy = routingPolicy;
@@ -81,7 +90,10 @@ public class OutboxEventService {
         this.mapper = mapper;
         this.marketInboundEnabled = marketInboundEnabled;
         this.publishBatchSize = Math.max(1, Math.min(publishBatchSize, 500));
+        this.priorityLogisticsBatchSize = Math.max(1, Math.min(priorityLogisticsBatchSize, this.publishBatchSize));
         this.maxRetryCount = Math.max(1, maxRetryCount);
+        this.autoPublishEnabled = autoPublishEnabled;
+        this.runtimeDeliveries = runtimeDeliveries;
     }
 
     @Transactional
@@ -118,10 +130,26 @@ public class OutboxEventService {
             );
             event.route(target.service(), router.targetUrl(target.service()), target.routingStatus(), skippedReason(target));
             OutboxEventEntity saved = repository.save(event);
+            snapshotAfterCommit(saved);
             return Optional.of(response(saved));
         } catch (DataIntegrityViolationException duplicate) {
             return Optional.empty();
         }
+    }
+
+    private void snapshotAfterCommit(OutboxEventEntity event) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            snapshotSafely(event);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() { snapshotSafely(event); }
+        });
+    }
+
+    private void snapshotSafely(OutboxEventEntity event) {
+        try { ArchiveOsRuntimeDeliveryService service = runtimeDeliveries.getIfAvailable(); if (service != null) service.snapshotOutbox(event); }
+        catch (RuntimeException ignored) { /* observability delivery cannot affect domain delivery */ }
     }
 
     @Transactional
@@ -216,7 +244,7 @@ public class OutboxEventService {
 
     @Scheduled(fixedDelayString = "${archive.integrations.routing.publish-interval-ms:${archive-nexus.ledger.publish-interval-ms:15000}}")
     public void scheduledPublish() {
-        if (router.enabled(OutboxTargetService.LOGITICS) || router.enabled(OutboxTargetService.LEDGER)) {
+        if (autoPublishEnabled && (router.enabled(OutboxTargetService.LOGITICS) || router.enabled(OutboxTargetService.LEDGER))) {
             publishPending(PublishTarget.AUTO, false);
         }
     }
@@ -265,15 +293,20 @@ public class OutboxEventService {
                 targetSkipped = events.size();
             } else {
                 try {
+                    for (OutboxEventEntity event : events) event.markPublishing(target, router.targetUrl(target), now);
+                    PublishAcknowledgement acknowledgement = router.publish(target, events);
                     for (OutboxEventEntity event : events) {
-                        event.recordPublishAttempt(target, router.targetUrl(target), now);
+                        if (acknowledgement.accepted(event.eventId())) {
+                            event.markPublished(now);
+                            targetPublished++;
+                        } else {
+                            event.markFailure(acknowledgement.rejectedEventReasons().getOrDefault(event.eventId(), "Downstream acknowledgement missing"), maxRetryCount);
+                            targetFailed++;
+                        }
                     }
-                    router.publish(target, events);
-                    events.forEach(event -> event.markPublished(now));
-                    targetPublished = events.size();
                 } catch (RuntimeException error) {
                     String message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-                    events.forEach(event -> event.markFailure(message, maxRetryCount));
+                    events.forEach(event -> markPublishFailure(event, message));
                     targetFailed = events.size();
                 }
             }
@@ -287,12 +320,64 @@ public class OutboxEventService {
                 published, skipped, failed, targetResults);
     }
 
+    /** Official single-event reconciliation/retry path; it never bulk-mutates a legacy backlog. */
+    @Transactional
+    public OutboxEventResponse publishEvent(String eventId) {
+        OutboxEventEntity event = repository.findByEventId(eventId)
+                .orElseThrow(() -> new IllegalArgumentException("Outbox event not found: " + eventId));
+        if (event.status() == OutboxStatus.PUBLISHED || event.status() == OutboxStatus.SKIPPED) return response(event);
+        OutboxTarget target = router.resolve(event);
+        Instant now = Instant.now();
+        if (target.service() == OutboxTargetService.NONE || target.service() == OutboxTargetService.UNKNOWN) {
+            event.route(target.service(), null, target.routingStatus(), target.reason());
+            event.markSkipped(target.reason(), target.routingStatus(), now);
+            return response(event);
+        }
+        if (!router.enabled(target.service())) {
+            event.markFailure(target.service() + " integration is disabled", maxRetryCount);
+            return response(event);
+        }
+        event.markPublishing(target.service(), router.targetUrl(target.service()), now);
+        try {
+            PublishAcknowledgement acknowledgement = router.publish(target.service(), List.of(event));
+            if (!acknowledgement.accepted(event.eventId())) {
+                event.markFailure(acknowledgement.rejectedEventReasons().getOrDefault(event.eventId(), "Downstream acknowledgement missing"), maxRetryCount);
+                return response(event);
+            }
+            event.markPublished(now);
+            return response(event);
+        } catch (RuntimeException error) {
+            if (event.status() == OutboxStatus.PUBLISHING) {
+                markPublishFailure(event, error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage());
+            }
+            return response(event);
+        }
+    }
+
+    private void markPublishFailure(OutboxEventEntity event, String message) {
+        if (isCredentialFailure(message)) {
+            event.markTerminalFailure("CONFIG_ERROR: " + message);
+            return;
+        }
+        event.markFailure(message, maxRetryCount);
+    }
+
+    private boolean isCredentialFailure(String message) {
+        return message != null && (message.contains("HTTP 401") || message.contains("HTTP 403")
+                || message.contains("Unauthorized") || message.contains("Forbidden"));
+    }
+
     private List<OutboxEventEntity> loadCandidatesByPublishTarget(PublishTarget target) {
         PageRequest page = PageRequest.of(0, publishBatchSize);
         List<OutboxStatus> statuses = List.of(OutboxStatus.PENDING, OutboxStatus.PENDING_RETRY);
         if (target == PublishTarget.AUTO) {
-            return repository.findAllByStatusInOrderByCreatedAtAsc(statuses, page)
-                    .stream()
+            List<OutboxEventEntity> prioritized = priorityMarketSynthetic(statuses);
+            if (!prioritized.isEmpty()) {
+                // A priority dispatch is intentionally sent alone: a legacy poison event
+                // must not make the Archive-Logistics bulk request fail as a whole.
+                return prioritized;
+            }
+            return repository.findAllByStatusInOrderByCreatedAtAsc(statuses, page).stream()
                     .filter(event -> router.matchesTarget(event, target))
                     .toList();
         }
@@ -308,6 +393,52 @@ public class OutboxEventService {
             return mergeByCreatedAtAsc(ledger, logitics);
         }
         return List.of();
+    }
+
+    /** A bounded priority lane prevents legacy FIFO history from blocking a new Market synthetic chain. */
+    private List<OutboxEventEntity> priorityMarketSynthetic(List<OutboxStatus> statuses) {
+        return repository.findAllByStatusInAndSourceOrderByCreatedAtDesc(
+                        statuses, "Archive-Market",
+                        PageRequest.of(0, Math.max(50, priorityLogisticsBatchSize * 10)))
+                .stream()
+                .filter(this::isPriorityMarketSyntheticCandidate)
+                .limit(priorityLogisticsBatchSize)
+                .toList();
+    }
+
+    private boolean isPriorityMarketSyntheticCandidate(OutboxEventEntity event) {
+        if (event.targetService() != OutboxTargetService.LOGITICS
+                && event.targetService() != OutboxTargetService.LEDGER) {
+            return false;
+        }
+        Map<String, Object> payload = read(event.payload());
+        return hasText(payload.get("correlationId"))
+                && hasText(payload.get("orderId"))
+                && syntheticSimulationRun(payload.get("simulationRunId"))
+                && event.retryCount() < maxRetryCount;
+    }
+
+    private boolean syntheticSimulationRun(Object value) {
+        return value != null && value.toString().startsWith("SIM-");
+    }
+
+    private boolean hasText(Object value) {
+        return value != null && !value.toString().isBlank();
+    }
+
+    private boolean positiveNumber(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue() > 0;
+        }
+        try {
+            return value != null && Integer.parseInt(value.toString()) > 0;
+        } catch (NumberFormatException ignored) {
+            return false;
+        }
+    }
+
+    private boolean compatibleRiskLevel(Object value) {
+        return value == null || value instanceof Number;
     }
 
     private List<OutboxEventEntity> mergeByCreatedAtAsc(List<OutboxEventEntity>... eventGroups) {

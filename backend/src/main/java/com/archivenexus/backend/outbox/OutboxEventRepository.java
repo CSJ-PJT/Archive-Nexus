@@ -16,6 +16,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
     List<OutboxEventEntity> findAllByOrderByCreatedAtDesc(Pageable pageable);
     List<OutboxEventEntity> findAllByStatusInOrderByCreatedAtAsc(Collection<OutboxStatus> statuses, Pageable pageable);
     List<OutboxEventEntity> findAllByStatusInAndTargetServiceOrderByCreatedAtAsc(Collection<OutboxStatus> statuses, OutboxTargetService targetService, Pageable pageable);
+    List<OutboxEventEntity> findAllByStatusInAndTargetServiceAndSourceOrderByCreatedAtDesc(Collection<OutboxStatus> statuses, OutboxTargetService targetService, String source, Pageable pageable);
+    List<OutboxEventEntity> findAllByStatusInAndSourceOrderByCreatedAtDesc(Collection<OutboxStatus> statuses, String source, Pageable pageable);
     List<OutboxEventEntity> findAllByTargetServiceOrderByCreatedAtDesc(OutboxTargetService targetService, Pageable pageable);
     List<OutboxEventEntity> findAllByStatusOrderByCreatedAtDesc(OutboxStatus status, Pageable pageable);
     List<OutboxEventEntity> findAllByTargetServiceAndStatusOrderByCreatedAtDesc(OutboxTargetService targetService, OutboxStatus status, Pageable pageable);

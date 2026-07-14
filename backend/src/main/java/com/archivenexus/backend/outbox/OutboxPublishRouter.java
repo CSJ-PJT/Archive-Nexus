@@ -63,12 +63,12 @@ public class OutboxPublishRouter {
         };
     }
 
-    public void publish(OutboxTargetService target, List<OutboxEventEntity> events) {
-        switch (target) {
+    public OutboxModels.PublishAcknowledgement publish(OutboxTargetService target, List<OutboxEventEntity> events) {
+        return switch (target) {
             case LOGITICS -> logiticsPublisher.publish(events);
             case LEDGER -> ledgerPublisher.publish(events);
             default -> throw new IllegalStateException("Unsupported outbox publish target: " + target);
-        }
+        };
     }
 
     public String health(OutboxTargetService target) {

@@ -123,11 +123,11 @@ public class RuntimeEventService {
         String safeEntityId = entityId.trim();
         List<RuntimeEventResponse> events = new ArrayList<>();
         outbox.events(1000).stream()
-                .filter(event -> safeEntityId.equals(event.aggregateId()) || safeEntityId.equals(entityIdFromPayload(event.payload())))
+                .filter(event -> safeEntityId.equals(event.aggregateId()) || payloadContainsEntityId(event.payload(), safeEntityId))
                 .map(this::fromOutbox)
                 .forEach(events::add);
         marketEvents.findAllByOrderByReceivedAtDesc(PageRequest.of(0, 1000)).stream()
-                .filter(event -> safeEntityId.equals(entityIdFromPayload(read(event.payloadJson()))))
+                .filter(event -> payloadContainsEntityId(read(event.payloadJson()), safeEntityId))
                 .flatMap(event -> fromMarket(event).stream())
                 .forEach(events::add);
         workforceAllocations.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 1000)).stream()
@@ -296,7 +296,7 @@ public class RuntimeEventService {
 
     private RuntimeEventResponse fromOutbox(OutboxEventResponse event) {
         Map<String, Object> payload = event.payload() == null ? Map.of() : event.payload();
-        String entityId = text(payload.get("entityId"), text(event.aggregateId(), entityIdFromPayload(payload)));
+        String entityId = entityIdForOutbox(event, payload);
         return new RuntimeEventResponse(
                 event.eventId(),
                 event.idempotencyKey(),
@@ -324,9 +324,7 @@ public class RuntimeEventService {
 
     private List<RuntimeEventResponse> fromMarket(MarketInboundEventEntity event) {
         Map<String, Object> payload = read(event.payloadJson());
-        String entityId = event.eventType() == MarketEventType.PRODUCTION_REQUESTED
-                ? event.eventId()
-                : entityIdFromPayload(payload);
+        String entityId = entityIdForMarket(event, payload);
         String projectedEventType = switch (event.eventType()) {
             case MARKET_ORDER_PLACED -> "MARKET_ORDER_RECEIVED";
             default -> event.eventType().name();
@@ -577,6 +575,7 @@ public class RuntimeEventService {
         }
         return switch (status) {
             case PENDING -> "WAITING";
+            case PUBLISHING -> "PROCESSING";
             case PENDING_RETRY -> "DELAYED";
             case FAILED -> "FAILED";
             case SKIPPED -> "COMPLETED";
@@ -635,6 +634,44 @@ public class RuntimeEventService {
             }
         }
         return null;
+    }
+
+    private boolean payloadContainsEntityId(Map<String, Object> payload, String entityId) {
+        if (payload == null || payload.isEmpty() || entityId == null) {
+            return false;
+        }
+        return List.of("entityId", "productionRequestId", "orderId", "shipmentId", "returnId", "claimId",
+                        "factoryId", "equipmentId", "vendorId", "workdayId")
+                .stream()
+                .map(payload::get)
+                .filter(Objects::nonNull)
+                .map(Object::toString)
+                .anyMatch(entityId::equals);
+    }
+
+    private String entityIdForMarket(MarketInboundEventEntity event, Map<String, Object> payload) {
+        if (event.eventType() == MarketEventType.PRODUCTION_REQUESTED) {
+            return text(payload.get("productionRequestId"), event.eventId());
+        }
+        if (event.eventType() == MarketEventType.SHIPMENT_REQUESTED) {
+            return text(payload.get("shipmentId"), entityIdFromPayload(payload));
+        }
+        if (event.eventType() == MarketEventType.RETURN_REQUESTED) {
+            return text(payload.get("returnId"), entityIdFromPayload(payload));
+        }
+        if (event.eventType() == MarketEventType.QUALITY_CLAIM_CREATED) {
+            return text(payload.get("claimId"), entityIdFromPayload(payload));
+        }
+        return entityIdFromPayload(payload);
+    }
+
+    private String entityIdForOutbox(OutboxEventResponse event, Map<String, Object> payload) {
+        if (event.eventType() == com.archivenexus.backend.outbox.OutboxModels.EventType.LOGISTICS_DISPATCHED
+                || event.eventType() == com.archivenexus.backend.outbox.OutboxModels.EventType.SHIPMENT_HOLD_CREATED
+                || event.eventType() == com.archivenexus.backend.outbox.OutboxModels.EventType.SHIPMENT_HOLD_RELEASED) {
+            return text(payload.get("shipmentId"), text(payload.get("entityId"), event.aggregateId()));
+        }
+        return text(payload.get("entityId"), text(event.aggregateId(), entityIdFromPayload(payload)));
     }
 
     private Map<String, Object> read(String json) {

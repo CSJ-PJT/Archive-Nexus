@@ -50,17 +50,27 @@ public class RuntimeWorkLoopService {
                                   @Value("${archive.runtime.autorun.enabled:false}") boolean autoRunEnabled,
                                   @Value("${archive.runtime.tick-interval:30s}") Duration tickInterval,
                                   @Value("${archive.runtime.max-events-per-tick:10}") int maxEventsPerTick,
-                                  @Value("${archive.runtime.max-backlog-per-tick:50}") int maxBacklogPerTick) {
+                                  @Value("${archive.runtime.max-backlog-per-tick:50}") int maxBacklogPerTick,
+                                  @Value("${spring.profiles.active:}") String activeProfiles) {
         this.marketEvents = marketEvents;
         this.workforce = workforce;
         this.outbox = outbox;
-        this.autoRunEnabled = autoRunEnabled;
+        // RC must never create synthetic Market demand implicitly. Local/demo may opt in explicitly.
+        this.autoRunEnabled = autoRunEnabled && !containsRcProfile(activeProfiles);
         this.tickInterval = tickInterval == null || tickInterval.isNegative() || tickInterval.isZero()
                 ? Duration.ofSeconds(30)
                 : tickInterval;
         this.maxEventsPerTick = Math.max(1, Math.min(maxEventsPerTick, 50));
         this.maxBacklogPerTick = Math.max(1, Math.min(maxBacklogPerTick, 500));
-        this.schedulerStatus = autoRunEnabled ? "IDLE" : "DISABLED";
+        this.schedulerStatus = this.autoRunEnabled ? "IDLE" : "DISABLED";
+    }
+
+    private boolean containsRcProfile(String activeProfiles) {
+        if (activeProfiles == null) return false;
+        for (String profile : activeProfiles.split(",")) {
+            if ("rc".equalsIgnoreCase(profile.trim()) || "production".equalsIgnoreCase(profile.trim())) return true;
+        }
+        return false;
     }
 
     @Scheduled(fixedDelayString = "${archive.runtime.tick-interval:30s}",

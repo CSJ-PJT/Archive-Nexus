@@ -37,11 +37,11 @@ docker compose ps
 | Prometheus | `http://localhost:19090` | target `archive-nexus-backend`가 `UP` |
 | Grafana | `http://localhost:13000` | 로그인 및 `Archive Nexus Operations` 조회 가능 |
 
-Grafana 기본 계정은 `admin / archive_nexus_local`이다. 공유 환경에서는 반드시 `.env`로 비밀번호를 변경한다.
+Grafana 자격증명에는 기본값이 없다. RC Compose는 `GRAFANA_ADMIN_USER`와 `GRAFANA_ADMIN_PASSWORD`가 주입되지 않으면 기동을 거부한다. 실제 값은 Git에 저장하지 않는다.
 
 ```dotenv
-GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=change-me
+GRAFANA_ADMIN_USER=
+GRAFANA_ADMIN_PASSWORD=
 ```
 
 ## Custom Metrics

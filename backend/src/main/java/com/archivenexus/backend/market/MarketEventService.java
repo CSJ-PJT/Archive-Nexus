@@ -4,6 +4,10 @@ import com.archivenexus.backend.outbox.OutboxModels.OutboxEventResponse;
 import com.archivenexus.backend.outbox.OutboxModels.EventType;
 import com.archivenexus.backend.outbox.OutboxEventService;
 import com.archivenexus.backend.workforce.WorkforceService;
+import com.archivenexus.backend.archiveos.runtime.ArchiveOsRuntimeDeliveryService;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
@@ -32,13 +36,15 @@ public class MarketEventService {
     private final OutboxEventService outbox;
     private final WorkforceService workforce;
     private final ObjectMapper mapper;
+    private final ObjectProvider<ArchiveOsRuntimeDeliveryService> runtimeDeliveries;
 
     public MarketEventService(MarketInboundEventRepository repository, OutboxEventService outbox,
-                              WorkforceService workforce, ObjectMapper mapper) {
+                              WorkforceService workforce, ObjectMapper mapper, ObjectProvider<ArchiveOsRuntimeDeliveryService> runtimeDeliveries) {
         this.repository = repository;
         this.outbox = outbox;
         this.workforce = workforce;
         this.mapper = mapper;
+        this.runtimeDeliveries = runtimeDeliveries;
     }
 
     @Transactional
@@ -96,12 +102,30 @@ public class MarketEventService {
             List<OutboxEventResponse> emitted = emitOutboxEvents(header, payload);
             entity.markProcessed(emitted.size(), extractedOutboxIds(emitted));
             MarketInboundEventEntity saved = repository.save(entity);
+            snapshotMarketAfterCommit(saved, payload);
             return response(saved, emitted, rawPayload, false);
         } catch (IllegalArgumentException ex) {
             entity.markFailed(ex.getMessage());
             MarketInboundEventEntity saved = repository.save(entity);
             return response(saved, List.of(), rawPayload, false);
         }
+    }
+
+    private void snapshotMarketAfterCommit(MarketInboundEventEntity event, Map<String,Object> payload) {
+        if (event.eventType() != MarketEventType.PRODUCTION_REQUESTED) return;
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() {
+                try {
+                    ArchiveOsRuntimeDeliveryService delivery = runtimeDeliveries.getIfAvailable();
+                    if (delivery == null) return;
+                    String orderId = asText(payload.get("orderId"));
+                    String entityId = asText(payload.get("productionRequestId"));
+                    if (entityId == null) entityId = event.eventId();
+                    delivery.snapshotMarket(event.eventId(), event.idempotencyKey(), event.correlationId(), event.causationId(), orderId, event.simulationRunId(), entityId, "PRODUCTION_REQUESTED", event.occurredAt(), payload);
+                    delivery.snapshotMarket(event.eventId()+":PRODUCTION_STARTED", event.idempotencyKey()+":PRODUCTION_STARTED", event.correlationId(), event.eventId(), orderId, event.simulationRunId(), entityId, "PRODUCTION_STARTED", event.occurredAt(), payload);
+                } catch (RuntimeException ignored) { }
+            }
+        });
     }
 
     @Transactional
@@ -308,15 +332,18 @@ public class MarketEventService {
             events.add(emit(EventType.PRODUCTION_DELAYED, header, payload, orderId, "ProductionOrder"));
             events.add(emit(EventType.BACKLOG_INCREASED, header, payload, orderId, "ProductionOrder"));
         }
-        if (decision.dispatchAllowed() && parseBoolean(payload.get("requiresShipment"), true)) {
+        // Dispatch is a terminal order-level action. A later production batch must not create a second shipment.
+        if (decision.dispatchAllowed() && parseBoolean(payload.get("requiresShipment"), true)
+                && !outbox.hasEventForAggregate(EventType.LOGISTICS_DISPATCHED, orderId)) {
             events.add(emit(EventType.LOGISTICS_DISPATCHED, header, payload,
-                    eventAggregateId(header, payload, "shipmentId"), "MarketShipment"));
+                    orderId, "MarketShipment"));
         }
         return events;
     }
 
     private List<OutboxEventResponse> shipmentOutbox(MarketInboundEventRequest header, Map<String, Object> payload) {
         boolean requiresShipment = parseBoolean(payload.get("requiresShipment"), true);
+        String orderId = eventAggregateId(header, payload, "orderId");
         if (!requiresShipment) {
             return List.of(emit(
                     EventType.SHIPMENT_HOLD_CREATED,
@@ -326,11 +353,25 @@ public class MarketEventService {
                     "MarketShipment"
             ));
         }
+        // SHIPMENT_REQUESTED is intent, not proof that the production/quality gate completed.
+        // Keep it local until PRODUCTION_COMPLETED emits the one canonical dispatch for the order.
+        if (!outbox.hasEventForAggregate(EventType.PRODUCTION_COMPLETED, orderId)) {
+            return List.of(emit(
+                    EventType.SHIPMENT_HOLD_CREATED,
+                    header,
+                    payload,
+                    orderId,
+                    "MarketShipmentHold"
+            ));
+        }
+        if (outbox.hasEventForAggregate(EventType.LOGISTICS_DISPATCHED, orderId)) {
+            return List.of();
+        }
         return List.of(emit(
                 EventType.LOGISTICS_DISPATCHED,
                 header,
                 payload,
-                eventAggregateId(header, payload, "shipmentId"),
+                orderId,
                 "MarketShipment"
         ));
     }
@@ -402,8 +443,11 @@ public class MarketEventService {
 
         if (payload != null) {
             merged.put("shipmentId", payload.get("shipmentId"));
+            merged.put("factoryId", payload.get("factoryId"));
             merged.put("originCode", payload.get("originCode"));
             merged.put("destinationCode", payload.get("destinationCode"));
+            merged.put("itemType", payload.get("itemType"));
+            merged.put("requiresColdChain", payload.get("requiresColdChain"));
             merged.put("orderId", payload.get("orderId"));
             merged.put("customerId", payload.get("customerId"));
             merged.put("customerType", payload.get("customerType"));
@@ -439,9 +483,52 @@ public class MarketEventService {
 
     private Map<String, Object> withMarketMetadata(EventType eventType, MarketInboundEventRequest header, Map<String, Object> payload) {
         Map<String, Object> mapped = new LinkedHashMap<>(preserveMetadata(header, payload));
+        if (eventType == EventType.LOGISTICS_DISPATCHED) {
+            String factoryId = textOrDefault(asText(mapped.get("factoryId")), "FAC-A");
+            mapped.put("factoryId", factoryId);
+            mapped.put("shipmentId", textOrDefault(asText(mapped.get("shipmentId")), header.eventId() + "-shipment"));
+            mapped.put("originCode", textOrDefault(asText(mapped.get("originCode")), factoryId));
+            mapped.put("destinationCode", textOrDefault(asText(mapped.get("destinationCode")), "DC-SEOUL-01"));
+            mapped.put("priority", textOrDefault(asText(mapped.get("priority")), "NORMAL"));
+            mapped.put("itemType", textOrDefault(asText(mapped.get("itemType")), textOrDefault(asText(mapped.get("productType")), "synthetic-component")));
+            mapped.put("requiresColdChain", parseBoolean(mapped.get("requiresColdChain"), false));
+            mapped.put("riskLevel", logisticsRiskLevel(mapped.get("riskLevel")));
+            mapped.put("sourceSystem", "Archive-Nexus");
+            mapped.put("targetSystem", "Archive-Logistics");
+        }
+        if (eventType == EventType.MATERIAL_CONSUMED || eventType == EventType.PRODUCTION_COMPLETED
+                || eventType == EventType.MAINTENANCE_COMPLETED || eventType == EventType.QUALITY_DEFECT_DETECTED
+                || eventType == EventType.QUALITY_CLAIM_CHARGED) {
+            long quantity = mapped.get("quantity") instanceof Number number ? Math.max(1L, number.longValue()) : 1L;
+            Object amount = mapped.get("amount");
+            if (!(amount instanceof Number)) {
+                Object orderAmount = mapped.get("orderAmount");
+                mapped.put("amount", orderAmount instanceof Number number ? number.longValue() : quantity * 120_000L);
+            }
+            mapped.putIfAbsent("currency", "KRW");
+            mapped.putIfAbsent("factoryId", "FAC-A");
+            mapped.put("sourceSystem", "archive-nexus");
+            mapped.put("targetSystem", "archive-ledger");
+        }
         mapped.put("eventMeaning", "mapped from " + header.eventType() + " -> " + eventType);
         mapped.put("requiresApproval", eventType == EventType.QUALITY_CLAIM_CHARGED);
         return mapped;
+    }
+
+    private int logisticsRiskLevel(Object value) {
+        if (value instanceof Number number) {
+            return Math.max(0, number.intValue());
+        }
+        if (value == null) {
+            return 0;
+        }
+        return switch (value.toString().trim().toUpperCase(java.util.Locale.ROOT)) {
+            case "LOW" -> 1;
+            case "MEDIUM" -> 2;
+            case "HIGH" -> 4;
+            case "CRITICAL" -> 5;
+            default -> 0;
+        };
     }
 
     private Map<String, Object> read(Map<String, Object> payload) {
@@ -480,6 +567,10 @@ public class MarketEventService {
         }
         String value = rawValue.toString().trim().toLowerCase();
         return value.equals("true") || value.equals("1") || value.equals("yes") || value.equals("y");
+    }
+
+    private static String asText(Object value) {
+        return value == null ? null : value.toString();
     }
 
     private List<String> extractOutboxIds(String outboxIdsJson) {

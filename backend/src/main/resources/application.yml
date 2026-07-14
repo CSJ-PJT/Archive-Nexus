@@ -3,8 +3,8 @@ spring:
     name: archive-nexus-backend
   datasource:
     url: ${ARCHIVE_NEXUS_DB_URL:jdbc:postgresql://localhost:55432/archive_nexus}
-    username: ${ARCHIVE_NEXUS_DB_USERNAME:archive_nexus}
-    password: ${ARCHIVE_NEXUS_DB_PASSWORD:archive_nexus_local}
+    username: ${ARCHIVE_NEXUS_DB_USERNAME:}
+    password: ${ARCHIVE_NEXUS_DB_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
       initialization-fail-timeout: 0
@@ -65,6 +65,20 @@ archive:
   workforce:
     enabled: ${ARCHIVE_WORKFORCE_ENABLED:false}
     baseline-capacity: ${ARCHIVE_WORKFORCE_BASELINE_CAPACITY:120}
+  security:
+    # Disabled only for explicit local/demo compatibility. RC Compose enables this and requires tokens.
+    enabled: ${ARCHIVE_SECURITY_ENABLED:false}
+    max-payload-bytes: ${ARCHIVE_SECURITY_MAX_PAYLOAD_BYTES:1048576}
+    max-batch-items: ${ARCHIVE_SECURITY_MAX_BATCH_ITEMS:100}
+    max-writes-per-minute: ${ARCHIVE_SECURITY_MAX_WRITES_PER_MINUTE:60}
+    allowed-origins: ${ARCHIVE_SECURITY_ALLOWED_ORIGINS:http://127.0.0.1:15173,http://localhost:15173}
+    market-token: ${ARCHIVE_TOKEN_MARKET_TO_NEXUS:}
+    operator-token: ${ARCHIVE_TOKEN_ADMIN_OPERATOR:}
+    reader-token: ${ARCHIVE_TOKEN_AUTHENTICATED_READ:}
+  tokens:
+    nexus-to-logistics: ${ARCHIVE_TOKEN_NEXUS_TO_LOGISTICS:}
+    nexus-to-ledger: ${ARCHIVE_TOKEN_NEXUS_TO_LEDGER:}
+    nexus-to-os: ${ARCHIVE_TOKEN_NEXUS_TO_OS:}
   integrations:
     logitics:
       enabled: ${ARCHIVE_INTEGRATIONS_LOGITICS_ENABLED:true}
@@ -82,17 +96,31 @@ archive:
       mode: ${ARCHIVE_INTEGRATIONS_ROUTING_MODE:AUTO}
       allow-ledger-direct-fallback-for-logistics: ${ARCHIVE_INTEGRATIONS_ROUTING_ALLOW_LEDGER_DIRECT_FALLBACK_FOR_LOGISTICS:false}
       chunk-size: ${ARCHIVE_INTEGRATIONS_ROUTING_CHUNK_SIZE:${ARCHIVE_LEDGER_PUBLISH_BATCH_SIZE:50}}
+      priority-logistics-batch-size: ${ARCHIVE_INTEGRATIONS_ROUTING_PRIORITY_LOGISTICS_BATCH_SIZE:5}
       max-retry-count: ${ARCHIVE_INTEGRATIONS_ROUTING_MAX_RETRY_COUNT:5}
       publish-interval-ms: ${ARCHIVE_INTEGRATIONS_ROUTING_PUBLISH_INTERVAL_MS:${ARCHIVE_LEDGER_PUBLISH_INTERVAL_MS:15000}}
+      auto-publish-enabled: ${ARCHIVE_INTEGRATIONS_ROUTING_AUTO_PUBLISH_ENABLED:true}
+
+archiveos:
+  runtime-ingest:
+    enabled: ${ARCHIVEOS_RUNTIME_INGEST_ENABLED:false}
+    timeout-ms: ${ARCHIVEOS_RUNTIME_INGEST_TIMEOUT_MS:2000}
+    batch-size: ${ARCHIVEOS_RUNTIME_INGEST_BATCH_SIZE:10}
+    max-retry: ${ARCHIVEOS_RUNTIME_INGEST_MAX_RETRY:5}
+    retry-delay-ms: ${ARCHIVEOS_RUNTIME_INGEST_RETRY_DELAY_MS:5000}
+    stale-publishing-ms: ${ARCHIVEOS_RUNTIME_INGEST_STALE_PUBLISHING_MS:60000}
+    startup-delay-ms: ${ARCHIVEOS_RUNTIME_INGEST_STARTUP_DELAY_MS:30000}
+    fixed-delay-ms: ${ARCHIVEOS_RUNTIME_INGEST_FIXED_DELAY_MS:5000}
 
 server:
   port: 8080
+  max-http-request-header-size: 16KB
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,prometheus
   endpoint:
     health:
       probes:
