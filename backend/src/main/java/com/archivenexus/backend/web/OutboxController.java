@@ -40,6 +40,11 @@ public class OutboxController {
         return outbox.publishPending(publishTarget(target), dryRun);
     }
 
+    @PostMapping("/events/{eventId}/publish")
+    OutboxEventResponse publishSingle(@PathVariable String eventId) {
+        return outbox.publishEvent(eventId);
+    }
+
     @GetMapping("/summary")
     OutboxSummary summary() {
         return outbox.summary();

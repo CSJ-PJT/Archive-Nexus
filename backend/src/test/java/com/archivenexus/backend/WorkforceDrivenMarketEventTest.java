@@ -209,7 +209,9 @@ class WorkforceDrivenMarketEventTest {
 
         verify(outbox).emit(eq(EventType.MAINTENANCE_COMPLETED), anyString(), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
         verify(outbox).emit(eq(EventType.PRODUCTION_COMPLETED), anyString(), eq("ORD-D-001"), anyString(), any(), any(Instant.class), eq("Archive-Market"));
-        verify(outbox).emit(eq(EventType.LOGISTICS_DISPATCHED), anyString(), eq("SHIP-D-001"), anyString(), any(), any(Instant.class), eq("Archive-Market"));
+        // Dispatch idempotency is order-scoped, so the event aggregate is the order rather
+        // than the shipment id; later shipment requests cannot duplicate it.
+        verify(outbox).emit(eq(EventType.LOGISTICS_DISPATCHED), anyString(), eq("ORD-D-001"), anyString(), any(), any(Instant.class), eq("Archive-Market"));
     }
 
     private void postProduction(String eventId, String orderId, String shipmentId, int quantity, boolean maintenanceRequired) throws Exception {

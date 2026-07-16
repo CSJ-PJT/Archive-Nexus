@@ -1,0 +1,5 @@
+# Local-only override. Never use this file for RC or externally reachable environments.
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-55432}:5432"

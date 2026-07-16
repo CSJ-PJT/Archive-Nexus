@@ -4,6 +4,10 @@
 
 # Archive-Nexus
 
+## RC 보안 기준
+
+Release Candidate Compose는 PostgreSQL을 Docker private network로 제한하고 backend/frontend/monitoring 포트를 `127.0.0.1`에만 바인딩합니다. 내부 write API는 서비스 ID·scope·Bearer token을 요구하며, 실제 토큰과 기본 비밀번호는 저장소에 포함하지 않습니다. 상세 계약과 rotation 절차는 [RC Security Baseline](docs/rc-security-baseline.md)을 참고하세요.
+
 > Runtime Mesh V1: ArchiveOS는 `GET /api/runtime/status`, `GET /api/runtime-events/recent?after={cursor}`, `GET /api/operations/summary`을 통해 Nexus의 Synthetic Runtime Data를 읽기 전용으로 수집할 수 있습니다. 자세한 계약은 [Archive Runtime Mesh V1](docs/archive-runtime-mesh-contract.md)을 참고하세요.
 
 > Workforce Driven Manufacturing Runtime: 생산 요청은 운영자·자재·품질·정비 처리 능력을 실제로 차감하며, 품질 검사를 마친 수량만 출하 이벤트로 연결됩니다. 자세한 흐름은 [제조 런타임 모델](docs/workforce-driven-manufacturing-runtime.md)을 참고하세요.

@@ -1,6 +1,8 @@
 package com.archivenexus.backend;
 
 import com.archivenexus.backend.outbox.OutboxEventRepository;
+import com.archivenexus.backend.outbox.OutboxEventService;
+import com.archivenexus.backend.outbox.OutboxModels.EventType;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxStatus;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxTargetService;
 import com.archivenexus.backend.persistence.DomainAggregateProjectionService;
@@ -11,6 +13,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.Instant;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -29,12 +34,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "archive-nexus.simulator.persistence-enabled=false",
         "archive.integrations.logitics.enabled=false",
         "archive.integrations.ledger.enabled=false",
-        "archive.integrations.routing.allow-ledger-direct-fallback-for-logistics=false"
+        "archive.integrations.routing.allow-ledger-direct-fallback-for-logistics=false",
+        "archive.integrations.routing.chunk-size=5",
+        "archive.integrations.routing.priority-logistics-batch-size=1"
 })
 @AutoConfigureMockMvc
 class OutboxApiTest {
     @Autowired MockMvc mvc;
     @Autowired OutboxEventRepository repository;
+    @Autowired OutboxEventService outbox;
     @MockBean DomainAggregateProjectionService projections;
 
     @Test
@@ -117,5 +125,25 @@ class OutboxApiTest {
                 .andExpect(jsonPath("$.integrations.logitics.status").value("DISABLED"))
                 .andExpect(jsonPath("$.integrations.ledger.status").value("DISABLED"))
                 .andExpect(jsonPath("$.routing.allowLedgerDirectFallbackForLogistics").value(false));
+    }
+
+    @Test
+    void marketLogisticsDispatchUsesPriorityLaneAheadOfLegacyFifoBacklog() throws Exception {
+        repository.deleteAll();
+        for (int index = 0; index < 5; index++) {
+            outbox.emit(EventType.PRODUCTION_COMPLETED, "LegacyProduction", "LEGACY-" + index,
+                    "legacy-ledger-" + index, Map.of("factoryId", "FAC-A"), Instant.now().minusSeconds(60 - index), "Archive-Nexus");
+        }
+        outbox.emit(EventType.LOGISTICS_DISPATCHED, "MarketShipment", "SHIP-NEW-1",
+                "market-priority-dispatch-1", Map.of(
+                        "factoryId", "FAC-A", "shipmentId", "SHIP-NEW-1", "originCode", "FAC-A",
+                        "destinationCode", "DC-SEOUL-01", "priority", "HIGH", "itemType", "battery-module",
+                        "quantity", 1, "correlationId", "CORR-NEW-1", "orderId", "ORD-NEW-1",
+                        "simulationRunId", "SIM-NEW-1"), Instant.now(), "Archive-Market");
+
+        mvc.perform(post("/api/outbox/events/publish?target=auto&dryRun=true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCandidates").value(1))
+                .andExpect(jsonPath("$.targets.LOGITICS.candidates").value(1));
     }
 }

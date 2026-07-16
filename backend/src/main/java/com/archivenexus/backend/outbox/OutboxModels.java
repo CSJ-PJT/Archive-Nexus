@@ -33,6 +33,7 @@ public final class OutboxModels {
 
     public enum OutboxStatus {
         PENDING,
+        PUBLISHING,
         PUBLISHED,
         PENDING_RETRY,
         FAILED,
@@ -131,6 +132,11 @@ public final class OutboxModels {
     }
 
     public record OutboxTarget(OutboxTargetService service, RoutingStatus routingStatus, String reason) {
+    }
+
+    /** Only explicitly accepted or idempotently duplicated downstream events are acknowledged. */
+    public record PublishAcknowledgement(java.util.Set<String> acceptedEventIds, java.util.Map<String, String> rejectedEventReasons) {
+        public boolean accepted(String eventId) { return acceptedEventIds.contains(eventId); }
     }
 
     public record IntegrationSummary(

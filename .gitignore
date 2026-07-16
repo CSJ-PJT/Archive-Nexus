@@ -13,6 +13,7 @@ frontend/*.tsbuildinfo
 
 # Environment
 .env
+.env.rc
 *.local
 data/
 backend/data/

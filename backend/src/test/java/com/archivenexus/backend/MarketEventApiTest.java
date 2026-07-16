@@ -155,7 +155,15 @@ class MarketEventApiTest {
         assertThat(((Map<String, Object>) payload.get("marketPayload")).get("orderId")).isEqualTo("ORD-1001");
         org.mockito.Mockito.verify(outbox).emit(eq(EventType.MATERIAL_CONSUMED), anyString(), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
         org.mockito.Mockito.verify(outbox).emit(eq(EventType.QUALITY_INSPECTION_COMPLETED), anyString(), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
-        org.mockito.Mockito.verify(outbox).emit(eq(EventType.LOGISTICS_DISPATCHED), eq("MarketShipment"), anyString(), anyString(), any(), any(Instant.class), eq("Archive-Market"));
+        ArgumentCaptor<Map<String, Object>> logisticsPayloadCaptor = ArgumentCaptor.forClass((Class) Map.class);
+        org.mockito.Mockito.verify(outbox).emit(eq(EventType.LOGISTICS_DISPATCHED), eq("MarketShipment"), anyString(), anyString(), logisticsPayloadCaptor.capture(), any(Instant.class), eq("Archive-Market"));
+        Map<String, Object> logisticsPayload = logisticsPayloadCaptor.getValue();
+        assertThat(logisticsPayload).containsEntry("sourceSystem", "Archive-Nexus")
+                .containsEntry("targetSystem", "Archive-Logistics")
+                .containsEntry("factoryId", "FAC-A")
+                .containsEntry("originCode", "FAC-A")
+                .containsEntry("destinationCode", "DC-SEOUL-01")
+                .containsEntry("shipmentId", "evt-prod-1-shipment");
 
         ArgumentCaptor<Map<String, Object>> chainPayloadCaptor = ArgumentCaptor.forClass((Class) Map.class);
         org.mockito.Mockito.verify(outbox, atLeast(4)).emit(
@@ -189,7 +197,7 @@ class MarketEventApiTest {
     }
 
     @Test
-    void shipmentRequestedMapsToLogisticsDispatchedWhenRequiresShipment() throws Exception {
+    void shipmentRequestedIsHeldUntilProductionCompletionCreatesCanonicalDispatch() throws Exception {
         MarketEventRequest request = shipmentRequestedRequest();
         mvc.perform(post("/api/events/market")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -199,9 +207,9 @@ class MarketEventApiTest {
                 .andExpect(jsonPath("$.status").value("PROCESSED"));
 
         org.mockito.Mockito.verify(outbox).emit(
-                eq(EventType.LOGISTICS_DISPATCHED),
-                eq("MarketShipment"),
-                eq("SHIP-9001"),
+                eq(EventType.SHIPMENT_HOLD_CREATED),
+                eq("MarketShipmentHold"),
+                eq("ORD-1001"),
                 anyString(),
                 any(),
                 any(Instant.class),

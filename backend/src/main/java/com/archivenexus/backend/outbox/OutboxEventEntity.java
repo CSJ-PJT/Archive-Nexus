@@ -118,11 +118,24 @@ public class OutboxEventEntity {
         this.routingStatus = RoutingStatus.ROUTED;
     }
 
+    public void markPublishing(OutboxTargetService target, String url, Instant now) {
+        recordPublishAttempt(target, url, now);
+        this.status = OutboxStatus.PUBLISHING;
+    }
+
     public void markFailure(String message, int maxRetryCount) {
         this.retryCount += 1;
         this.lastError = message;
         this.routingStatus = RoutingStatus.ROUTE_FAILED;
         this.status = retryCount >= Math.max(1, maxRetryCount) ? OutboxStatus.FAILED : OutboxStatus.PENDING_RETRY;
+    }
+
+    /** Authentication/authorization failures are configuration errors, not retryable transport failures. */
+    public void markTerminalFailure(String message) {
+        this.retryCount += 1;
+        this.lastError = message;
+        this.routingStatus = RoutingStatus.ROUTE_FAILED;
+        this.status = OutboxStatus.FAILED;
     }
 
     public void markSkipped(String reason, RoutingStatus routingStatus, Instant now) {
