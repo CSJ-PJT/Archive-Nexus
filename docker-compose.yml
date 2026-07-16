@@ -82,6 +82,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - default
+      - archive-runtime
 
   archive-nexus-frontend:
     build:
@@ -135,3 +138,8 @@ volumes:
   postgres-data:
   prometheus-data:
   grafana-data:
+
+networks:
+  archive-runtime:
+    external: true
+    name: archive-runtime
