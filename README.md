@@ -3,7 +3,7 @@
 </p>
 
 # Archive-Nexus
-rchive-Nexus는 제조·출하 이벤트를 생성하고, Archive-Market 주문을 생산 흐름으로 받아들이며, 합성 운영 인력의 처리 능력에 따라 생산 처리량·미처리 물량·품질/정비 리스크를 계산하는 Manufacturing AX 백엔드입니다.
+Archive-Nexus는 제조·출하 이벤트를 생성하고, Archive-Market 주문을 생산 흐름으로 받아들이며, 합성 운영 인력의 처리 능력에 따라 생산 처리량·미처리 물량·품질/정비 리스크를 계산하는 Manufacturing AX 백엔드입니다.
 
 ## 운영 역할
 
