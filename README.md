@@ -4,20 +4,6 @@
 
 # Archive-Nexus
 
-## RC 보안 기준
-
-Release Candidate Compose는 PostgreSQL을 Docker private network로 제한하고 backend/frontend/monitoring 포트를 `127.0.0.1`에만 바인딩합니다. 내부 write API는 서비스 ID·scope·Bearer token을 요구하며, 실제 토큰과 기본 비밀번호는 저장소에 포함하지 않습니다. 상세 계약과 rotation 절차는 [RC Security Baseline](docs/rc-security-baseline.md)을 참고하세요.
-
-> Runtime Mesh V1: ArchiveOS는 `GET /api/runtime/status`, `GET /api/runtime-events/recent?after={cursor}`, `GET /api/operations/summary`을 통해 Nexus의 Synthetic Runtime Data를 읽기 전용으로 수집할 수 있습니다. 자세한 계약은 [Archive Runtime Mesh V1](docs/archive-runtime-mesh-contract.md)을 참고하세요.
-
-> Workforce Driven Manufacturing Runtime: 생산 요청은 운영자·자재·품질·정비 처리 능력을 실제로 차감하며, 품질 검사를 마친 수량만 출하 이벤트로 연결됩니다. 자세한 흐름은 [제조 런타임 모델](docs/workforce-driven-manufacturing-runtime.md)을 참고하세요.
-
-Archive-Nexus는 제조·출하 이벤트를 생성하고, Archive-Market 주문을 생산 흐름으로 받아들이며, 합성 운영 인력의 처리 능력에 따라 생산 처리량·미처리 물량·품질/정비 리스크를 계산하는 Manufacturing AX 백엔드입니다.
-
-Nexus는 생성된 제조 이벤트를 Outbox에 저장한 뒤 `eventType` 기반 라우팅 정책에 따라 Archive-Logistics 또는 Archive-Ledger로 전달합니다. 외부 서비스가 비활성화되거나 중단되어도 제조 API, 시뮬레이터, 대시보드가 중단되지 않도록 장애를 격리합니다.
-
-> 모든 주문, 고객, 금액, 인력, 정산 데이터는 Synthetic Data / Demo Data입니다. 실제 고객 정보, 실제 결제 정보, 실제 배송 주소, 실제 직원/급여/개인정보를 저장하지 않습니다.
-
 ## 운영 역할
 
 - Factory A/B/C 제조 런타임 상태 생성 및 조회
@@ -331,3 +317,17 @@ docker compose config --quiet
 - 실제 개인정보, 실제 금융정보, 실제 결제정보, 실제 배송주소, 실제 직원/급여 데이터를 사용하지 않습니다.
 - 고객 ID, 계정 ID, 카드 token, 운영 인력, 금액, 주문, 정산 값은 모두 synthetic/demo 식별자와 금액입니다.
 - `.env`, token, webhook, private key, API key, local DB/data/build output은 Git에 커밋하지 않습니다.
+
+## RC 보안 기준
+
+Release Candidate Compose는 PostgreSQL을 Docker private network로 제한하고 backend/frontend/monitoring 포트를 `127.0.0.1`에만 바인딩합니다. 내부 write API는 서비스 ID·scope·Bearer token을 요구하며, 실제 토큰과 기본 비밀번호는 저장소에 포함하지 않습니다. 상세 계약과 rotation 절차는 [RC Security Baseline](docs/rc-security-baseline.md)을 참고하세요.
+
+> Runtime Mesh V1: ArchiveOS는 `GET /api/runtime/status`, `GET /api/runtime-events/recent?after={cursor}`, `GET /api/operations/summary`을 통해 Nexus의 Synthetic Runtime Data를 읽기 전용으로 수집할 수 있습니다. 자세한 계약은 [Archive Runtime Mesh V1](docs/archive-runtime-mesh-contract.md)을 참고하세요.
+
+> Workforce Driven Manufacturing Runtime: 생산 요청은 운영자·자재·품질·정비 처리 능력을 실제로 차감하며, 품질 검사를 마친 수량만 출하 이벤트로 연결됩니다. 자세한 흐름은 [제조 런타임 모델](docs/workforce-driven-manufacturing-runtime.md)을 참고하세요.
+
+Archive-Nexus는 제조·출하 이벤트를 생성하고, Archive-Market 주문을 생산 흐름으로 받아들이며, 합성 운영 인력의 처리 능력에 따라 생산 처리량·미처리 물량·품질/정비 리스크를 계산하는 Manufacturing AX 백엔드입니다.
+
+Nexus는 생성된 제조 이벤트를 Outbox에 저장한 뒤 `eventType` 기반 라우팅 정책에 따라 Archive-Logistics 또는 Archive-Ledger로 전달합니다. 외부 서비스가 비활성화되거나 중단되어도 제조 API, 시뮬레이터, 대시보드가 중단되지 않도록 장애를 격리합니다.
+
+> 모든 주문, 고객, 금액, 인력, 정산 데이터는 Synthetic Data / Demo Data입니다. 실제 고객 정보, 실제 결제 정보, 실제 배송 주소, 실제 직원/급여/개인정보를 저장하지 않습니다.
