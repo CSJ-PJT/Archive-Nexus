@@ -3,7 +3,6 @@ package com.archivenexus.backend.persistence;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -24,56 +23,43 @@ public class SimulatorStateEntity {
     @Column(name = "last_parallel_worker_count", nullable = false)
     private int lastParallelWorkerCount;
 
-    @Lob
-    @Column(name = "factories_json", nullable = false)
+    @Column(name = "factories_json", nullable = false, columnDefinition = "text")
     private String factoriesJson;
 
-    @Lob
-    @Column(name = "sensor_metrics_json", nullable = false)
+    @Column(name = "sensor_metrics_json", nullable = false, columnDefinition = "text")
     private String sensorMetricsJson;
 
-    @Lob
-    @Column(name = "production_orders_json", nullable = false)
+    @Column(name = "production_orders_json", nullable = false, columnDefinition = "text")
     private String productionOrdersJson;
 
-    @Lob
-    @Column(name = "lots_json", nullable = false)
+    @Column(name = "lots_json", nullable = false, columnDefinition = "text")
     private String lotsJson;
 
-    @Lob
-    @Column(name = "quality_inspections_json", nullable = false)
+    @Column(name = "quality_inspections_json", nullable = false, columnDefinition = "text")
     private String qualityInspectionsJson;
 
-    @Lob
-    @Column(name = "inventory_items_json", nullable = false)
+    @Column(name = "inventory_items_json", nullable = false, columnDefinition = "text")
     private String inventoryItemsJson;
 
-    @Lob
-    @Column(name = "inventory_transactions_json", nullable = false)
+    @Column(name = "inventory_transactions_json", nullable = false, columnDefinition = "text")
     private String inventoryTransactionsJson;
 
-    @Lob
-    @Column(name = "logistics_shipments_json", nullable = false)
+    @Column(name = "logistics_shipments_json", nullable = false, columnDefinition = "text")
     private String logisticsShipmentsJson;
 
-    @Lob
-    @Column(name = "maintenance_events_json", nullable = false)
+    @Column(name = "maintenance_events_json", nullable = false, columnDefinition = "text")
     private String maintenanceEventsJson;
 
-    @Lob
-    @Column(name = "alerts_json", nullable = false)
+    @Column(name = "alerts_json", nullable = false, columnDefinition = "text")
     private String alertsJson;
 
-    @Lob
-    @Column(name = "rpa_tasks_json", nullable = false)
+    @Column(name = "rpa_tasks_json", nullable = false, columnDefinition = "text")
     private String rpaTasksJson;
 
-    @Lob
-    @Column(name = "batch_snapshots_json", nullable = false)
+    @Column(name = "batch_snapshots_json", nullable = false, columnDefinition = "text")
     private String batchSnapshotsJson;
 
-    @Lob
-    @Column(name = "archiveos_interactions_json", nullable = false)
+    @Column(name = "archiveos_interactions_json", nullable = false, columnDefinition = "text")
     private String archiveOsInteractionsJson;
 
     @Column(name = "saved_at", nullable = false)
