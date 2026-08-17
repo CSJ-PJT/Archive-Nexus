@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16
     container_name: archive-nexus-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
       POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
