@@ -114,6 +114,7 @@ services:
       - "127.0.0.1:19090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${NEXUS_PROMETHEUS_READER_TOKEN_FILE:?NEXUS_PROMETHEUS_READER_TOKEN_FILE is required}:/run/secrets/nexus-reader-token:ro
       - prometheus-data:/prometheus
     depends_on:
       archive-nexus-backend:
