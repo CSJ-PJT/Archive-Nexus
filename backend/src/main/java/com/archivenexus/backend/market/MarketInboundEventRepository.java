@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 
 public interface MarketInboundEventRepository extends JpaRepository<MarketInboundEventEntity, Long> {
     Optional<MarketInboundEventEntity> findByEventId(String eventId);
@@ -15,6 +16,8 @@ public interface MarketInboundEventRepository extends JpaRepository<MarketInboun
     long countByProcessingStatus(MarketEventStatus status);
     long countBySource(String source);
     long countBySourceAndProcessingStatus(String source, MarketEventStatus status);
+    long countByEventTypeAndProcessingStatusAndReceivedAtBetween(
+            MarketEventType eventType, MarketEventStatus status, Instant periodStart, Instant periodEnd);
     List<MarketInboundEventEntity> findAllByOrderByReceivedAtDesc(Pageable pageable);
     List<MarketInboundEventEntity> findAllByProcessingStatusOrderByReceivedAtDesc(MarketEventStatus status, Pageable pageable);
     List<MarketInboundEventEntity> findAllByCorrelationIdOrderByReceivedAtDesc(String correlationId, Pageable pageable);

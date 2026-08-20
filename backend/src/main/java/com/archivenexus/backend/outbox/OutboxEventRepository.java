@@ -28,6 +28,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
             OutboxStatus status, Instant periodStart, Instant periodEnd, Pageable pageable);
     List<OutboxEventEntity> findAllByTargetServiceAndStatusOrderByCreatedAtDesc(OutboxTargetService targetService, OutboxStatus status, Pageable pageable);
     long countByStatus(OutboxStatus status);
+    long countByEventTypeAndStatusAndCreatedAtBetween(
+            OutboxModels.EventType eventType, OutboxStatus status, Instant periodStart, Instant periodEnd);
     long countByEventType(OutboxModels.EventType eventType);
     long countByTargetService(OutboxTargetService targetService);
     long countByTargetServiceAndStatus(OutboxTargetService targetService, OutboxStatus status);

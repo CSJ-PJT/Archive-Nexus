@@ -149,6 +149,8 @@ public class RuntimeEventService {
     }
 
     public OperationsSummaryResponse operationsSummary() {
+        Instant periodEnd = Instant.now();
+        Instant periodStart = periodEnd.minus(ECONOMY_WINDOW);
         OutboxSummary outboxSummary = outbox.summary();
         WorkforceSummary workforceSummary = workforce.workforceSummary();
         WorkdayResultEntity latestWorkday = workdayResults.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 1))
@@ -167,19 +169,23 @@ public class RuntimeEventService {
                 ? "Outbox has failed events"
                 : retry > 0 ? "Outbox has retrying events" : null;
         EconomyOperationsSummary economy = economySummary();
+        int recentProductionRequested = Math.toIntExact(marketEvents.countByEventTypeAndProcessingStatusAndReceivedAtBetween(
+                MarketEventType.PRODUCTION_REQUESTED, MarketEventStatus.PROCESSED, periodStart, periodEnd));
+        int recentProductionCompleted = Math.toIntExact(outbox.countPublishedBetween(
+                EventType.PRODUCTION_COMPLETED, periodStart, periodEnd));
         return new OperationsSummaryResponse(
                 SERVICE_NAME,
                 SERVICE_ROLE,
                 status,
                 latestEventAt,
-                latestWorkday == null ? 0 : latestWorkday.productionRequested(),
-                latestWorkday == null ? 0 : latestWorkday.productionCompleted(),
+                latestWorkday == null ? recentProductionRequested : latestWorkday.productionRequested(),
+                latestWorkday == null ? recentProductionCompleted : latestWorkday.productionCompleted(),
                 latestWorkday == null ? workforceSummary.backlog() : latestWorkday.productionBacklog(),
                 latestWorkday == null ? 0 : latestWorkday.qualityDefects(),
                 marketEvents.count(),
                 new OutboxOperationsSummary(outboxSummary.pending(), outboxSummary.published(), failed, retry),
                 economy,
-                productionSummary(latestWorkday, workforceSummary, economy),
+                productionSummary(latestWorkday, workforceSummary, economy, recentProductionRequested, recentProductionCompleted),
                 new WorkforceOperationsSummary(
                         workforceSummary.totalActiveWorkers(),
                         workforceSummary.estimatedDailyCapacity(),
@@ -315,10 +321,18 @@ public class RuntimeEventService {
 
     private ProductionOperationsSummary productionSummary(WorkdayResultEntity latestWorkday,
                                                           WorkforceSummary workforceSummary,
-                                                          EconomyOperationsSummary economy) {
+                                                          EconomyOperationsSummary economy,
+                                                          int recentProductionRequested,
+                                                          int recentProductionCompleted) {
         if (latestWorkday == null) {
-            return new ProductionOperationsSummary(false, "No persisted synthetic workday result is available", null,
-                    null, null, null, null, null, null, workforceSummary.bottleneckRole(), null, null);
+            int recentBacklog = Math.max(0, recentProductionRequested - recentProductionCompleted);
+            boolean available = recentProductionRequested > 0 || recentProductionCompleted > 0;
+            return new ProductionOperationsSummary(available,
+                    available ? null : "No published production activity is available in the last 24 hours",
+                    recentProductionRequested, recentProductionCompleted, recentBacklog,
+                    recentProductionRequested, recentProductionCompleted, recentBacklog,
+                    percent(workforceSummary.usedCapacity(), workforceSummary.estimatedDailyCapacity()),
+                    workforceSummary.bottleneckRole(), economy.qualityDefectRate(), economy.downtimeRate());
         }
         return new ProductionOperationsSummary(true, null,
                 latestWorkday.productionRequested(), latestWorkday.productionCompleted(), latestWorkday.productionBacklog(),

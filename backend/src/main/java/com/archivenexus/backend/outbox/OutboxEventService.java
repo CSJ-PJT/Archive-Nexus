@@ -389,6 +389,11 @@ public class OutboxEventService {
         }
     }
 
+    public long countPublishedBetween(EventType eventType, Instant periodStart, Instant periodEnd) {
+        return repository.countByEventTypeAndStatusAndCreatedAtBetween(
+                eventType, OutboxStatus.PUBLISHED, periodStart, periodEnd);
+    }
+
     private void markPublishFailure(OutboxEventEntity event, String message) {
         if (isCredentialFailure(message)) {
             event.markTerminalFailure("CONFIG_ERROR: " + message);
