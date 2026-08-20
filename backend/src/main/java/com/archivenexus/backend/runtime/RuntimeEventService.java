@@ -249,7 +249,8 @@ public class RuntimeEventService {
                     case PRODUCTION_COMPLETED -> {
                         productionEvents++;
                         manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"),
-                                BigDecimal.valueOf(number(payload.get("productionCompleted"), number(payload.get("quantity"), 0)))
+                                BigDecimal.valueOf(number(payload.get("producedQuantity"),
+                                        number(payload.get("productionCompleted"), number(payload.get("quantity"), 0))))
                                         .multiply(BigDecimal.valueOf(120_000))));
                     }
                     case MATERIAL_CONSUMED -> materialCost = materialCost.add(money(payload.get("estimatedCost"),

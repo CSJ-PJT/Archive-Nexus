@@ -37,7 +37,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
               count(*) filter (where event_type in ('QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED')) as "qualityDefects",
               coalesce(sum(case when event_type = 'PRODUCTION_COMPLETED' then greatest(coalesce(
                 nullif(payload::jsonb ->> 'totalAmount', '')::numeric,
-                coalesce(nullif(payload::jsonb ->> 'productionCompleted', '')::numeric,
+                coalesce(nullif(payload::jsonb ->> 'producedQuantity', '')::numeric,
+                         nullif(payload::jsonb ->> 'productionCompleted', '')::numeric,
                          nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 120000), 0) else 0 end), 0) as "manufacturingRevenue",
               coalesce(sum(case when event_type = 'MATERIAL_CONSUMED' then greatest(coalesce(
                 nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
