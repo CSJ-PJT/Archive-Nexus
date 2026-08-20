@@ -36,10 +36,10 @@ local/demo autorun은 제한된 수량의 `MARKET_ORDER_PLACED`와 `PRODUCTION_R
 
 - manufacturingRevenue
 - materialCost / maintenanceCost / qualityLossCost / logisticsFee / workforceCost
-- operatingProfit / operatingMargin / cashBalance
+- operatingProfit / operatingMargin / cashBalance (`null`: cash ledger contract `NO_DATA`)
 - qualityDefectRate / downtimeRate / negativeProfitStreak
 
-목표 operating margin의 참고 범위는 5~12%이며, 이 값은 synthetic runtime 운영 판단용이지 실제 재무제표가 아니다. `cashBalance`도 같은 window의 순운영 현금 효과를 나타내며, 임의의 시작 잔액을 더하지 않는다. `workforce.capacityUtilization`, production requested/completed/backlog, bottleneck role은 같은 summary에 함께 제공된다.
+목표 operating margin의 참고 범위는 5~12%이며, 이 값은 synthetic runtime 운영 판단용이지 실제 재무제표가 아니다. 인식 손익은 `PUBLISHED` outbox 중 응답의 `periodStart`~`periodEnd`(최근 24시간)에 생성된 이벤트만 집계한다. `PRODUCTION_COMPLETED` 매출은 payload에 명시된 `totalAmount`만 인정하며 수량 기반 단가 추정은 하지 않는다. `currency=SYNTHETIC_KRW`는 실제 원장 잔액과 구분되는 합성 단위다. 현금 원장 계약이 없으므로 `cashBalance`는 영업이익을 복사하지 않고 `null`(`NO_DATA`)로 제공한다. `workforce.capacityUtilization`, production requested/completed/backlog, bottleneck role은 같은 summary에 함께 제공되지만 인식 손익에는 합산하지 않는다.
 
 ## 안전성
 

@@ -5,6 +5,7 @@ import com.archivenexus.backend.market.MarketInboundEventRepository;
 import com.archivenexus.backend.market.MarketEventModels.MarketEventStatus;
 import com.archivenexus.backend.market.MarketEventModels.MarketEventType;
 import com.archivenexus.backend.outbox.OutboxEventService;
+import com.archivenexus.backend.outbox.OutboxModels.EventType;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxEventResponse;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxStatus;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxSummary;
@@ -22,6 +23,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -37,6 +39,9 @@ public class RuntimeEventService {
     };
     private static final String SERVICE_NAME = "Archive-Nexus";
     private static final String SERVICE_ROLE = "Manufacturing AX runtime, market inbound, workforce capacity, and outbox routing";
+    private static final Duration ECONOMY_WINDOW = Duration.ofHours(24);
+    private static final String ECONOMY_SCOPE = "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS";
+    private static final String ECONOMY_CURRENCY = "SYNTHETIC_KRW";
 
     private final OutboxEventService outbox;
     private final MarketInboundEventRepository marketEvents;
@@ -161,7 +166,7 @@ public class RuntimeEventService {
         String degradedReason = failed > 0
                 ? "Outbox has failed events"
                 : retry > 0 ? "Outbox has retrying events" : null;
-        EconomyOperationsSummary economy = economySummary(workforceSummary, latestWorkday);
+        EconomyOperationsSummary economy = economySummary();
         return new OperationsSummaryResponse(
                 SERVICE_NAME,
                 SERVICE_ROLE,
@@ -217,21 +222,26 @@ public class RuntimeEventService {
     }
 
     /**
-     * Synthetic operating balance derived only from persisted Nexus outbox and workforce data.
-     * It is a runtime estimate, never a real financial statement or customer transaction record.
+     * Synthetic recognized P&amp;L derived only from published Nexus outbox events in the last 24 hours.
+     * Operational workday metrics remain separate and no cash balance is inferred from profit.
      */
-    private EconomyOperationsSummary economySummary(WorkforceSummary workforceSummary, WorkdayResultEntity latestWorkday) {
+    EconomyOperationsSummary economySummary() {
+        Instant calculatedAt = Instant.now();
+        Instant since = calculatedAt.minus(ECONOMY_WINDOW);
         BigDecimal manufacturingRevenue = BigDecimal.ZERO;
         BigDecimal materialCost = BigDecimal.ZERO;
         BigDecimal maintenanceCost = BigDecimal.ZERO;
         BigDecimal qualityLossCost = BigDecimal.ZERO;
         BigDecimal logisticsFee = BigDecimal.ZERO;
+        long publishedEvents = 0;
         long productionEvents = 0;
         long maintenanceRequired = 0;
         long qualityDefects = 0;
-        String calculationScope = "ALL_PERSISTED_OUTBOX_EVENTS";
+        Instant sourceLatestEventAt = null;
+        String calculationScope = ECONOMY_SCOPE;
         try {
-            OutboxEventService.EconomyAggregate aggregate = outbox.economyAggregate();
+            OutboxEventService.EconomyAggregate aggregate = outbox.economyAggregate(since, calculatedAt);
+            publishedEvents = aggregate.publishedEvents();
             productionEvents = aggregate.productionEvents();
             maintenanceRequired = aggregate.maintenanceRequired();
             qualityDefects = aggregate.qualityDefects();
@@ -241,17 +251,25 @@ public class RuntimeEventService {
             qualityLossCost = aggregate.qualityLossCost();
             logisticsFee = aggregate.logisticsFee();
             calculationScope = aggregate.calculationScope();
+            sourceLatestEventAt = aggregate.sourceLatestEventAt();
         } catch (RuntimeException unsupportedAggregateQuery) {
-            calculationScope = "LATEST_1000_PERSISTED_OUTBOX_EVENTS_FALLBACK";
-            for (OutboxEventResponse event : outbox.events(1000)) {
+            calculationScope = ECONOMY_SCOPE + "_FALLBACK_LATEST_1000";
+            for (OutboxEventResponse event : outbox.publishedEventsBetween(since, calculatedAt, 1000)) {
+                if (event.status() != OutboxStatus.PUBLISHED || event.createdAt() == null
+                        || event.createdAt().isBefore(since) || event.createdAt().isAfter(calculatedAt)) {
+                    continue;
+                }
                 Map<String, Object> payload = event.payload() == null ? Map.of() : event.payload();
+                if (isFinanceEvent(event.eventType(), payload)) {
+                    publishedEvents++;
+                    if (sourceLatestEventAt == null || event.createdAt().isAfter(sourceLatestEventAt)) {
+                        sourceLatestEventAt = event.createdAt();
+                    }
+                }
                 switch (event.eventType()) {
                     case PRODUCTION_COMPLETED -> {
                         productionEvents++;
-                        manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"),
-                                BigDecimal.valueOf(number(payload.get("producedQuantity"),
-                                        number(payload.get("productionCompleted"), number(payload.get("quantity"), 0))))
-                                        .multiply(BigDecimal.valueOf(120_000))));
+                        manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"), BigDecimal.ZERO));
                     }
                     case MATERIAL_CONSUMED -> materialCost = materialCost.add(money(payload.get("estimatedCost"),
                             BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
@@ -269,29 +287,27 @@ public class RuntimeEventService {
                 }
             }
         }
-        boolean available = productionEvents > 0 || latestWorkday != null;
+        boolean available = publishedEvents > 0;
         if (!available) {
             return new EconomyOperationsSummary(null, null, null, "NO_DATA",
                     null, null, null, null, null, null, null, null, null, null, null, 0,
-                    false, "No persisted synthetic manufacturing work has been completed yet", null,
-                    "NO_PERSISTED_MANUFACTURING_WORK", Instant.now());
+                    false, "No published synthetic finance events were recorded in the last 24 hours", null,
+                    calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, sourceLatestEventAt);
         }
-        BigDecimal workforceCost = workforceSummary.payrollCost();
+        BigDecimal workforceCost = BigDecimal.ZERO;
         BigDecimal totalCost = materialCost.add(maintenanceCost).add(qualityLossCost).add(logisticsFee).add(workforceCost);
         BigDecimal operatingProfit = manufacturingRevenue.subtract(totalCost);
-        int requested = latestWorkday == null ? 0 : latestWorkday.productionRequested();
-        int defects = latestWorkday == null ? (int) qualityDefects : latestWorkday.qualityDefects();
-        BigDecimal qualityDefectRate = percent(defects, Math.max(1, requested));
+        BigDecimal qualityDefectRate = percent(qualityDefects, Math.max(1L, productionEvents));
         BigDecimal downtimeRate = percent(maintenanceRequired, Math.max(1L, productionEvents + maintenanceRequired));
         return new EconomyOperationsSummary(
                 manufacturingRevenue, totalCost, operatingProfit,
-                "SYNTHETIC_RUNTIME_ESTIMATE",
+                "SYNTHETIC_PUBLISHED_OUTBOX_24H",
                 manufacturingRevenue, materialCost, maintenanceCost, qualityLossCost, logisticsFee, workforceCost,
                 operatingProfit, percent(operatingProfit, manufacturingRevenue),
-                operatingProfit, qualityDefectRate, downtimeRate,
+                null, qualityDefectRate, downtimeRate,
                 operatingProfit.signum() < 0 ? 1 : 0,
                 true, null, totalCost,
-                calculationScope + "_AND_LATEST_WORKDAY", Instant.now()
+                calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, sourceLatestEventAt
         );
     }
 
@@ -723,6 +739,25 @@ public class RuntimeEventService {
             return value == null ? fallback : new BigDecimal(value.toString()).max(BigDecimal.ZERO);
         } catch (NumberFormatException ignored) {
             return fallback;
+        }
+    }
+
+    private static boolean isFinanceEvent(EventType type, Map<String, Object> payload) {
+        return switch (type) {
+            case PRODUCTION_COMPLETED -> isExplicitAmount(payload.get("totalAmount"));
+            case MATERIAL_CONSUMED, MAINTENANCE_COMPLETED,
+                 QUALITY_DEFECT_DETECTED, QUALITY_CLAIM_CHARGED, LOGISTICS_DISPATCHED -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isExplicitAmount(Object value) {
+        if (value == null || String.valueOf(value).isBlank()) return false;
+        try {
+            new BigDecimal(String.valueOf(value));
+            return true;
+        } catch (NumberFormatException ignored) {
+            return false;
         }
     }
 

@@ -12,6 +12,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -116,13 +117,18 @@ class RuntimeEventApiTest {
                 .andExpect(jsonPath("$.outbox.published").exists())
                 .andExpect(jsonPath("$.outbox.failed").exists())
                 .andExpect(jsonPath("$.outbox.retry").exists())
-                .andExpect(jsonPath("$.economy.manufacturingRevenue").exists())
-                .andExpect(jsonPath("$.economy.materialCost").exists())
-                .andExpect(jsonPath("$.economy.operatingMargin").exists())
-                .andExpect(jsonPath("$.economy.cashBalance").exists())
+                .andExpect(jsonPath("$.economy.manufacturingRevenue").value(nullValue()))
+                .andExpect(jsonPath("$.economy.materialCost").value(nullValue()))
+                .andExpect(jsonPath("$.economy.operatingMargin").value(nullValue()))
+                .andExpect(jsonPath("$.economy.cashBalance").value(nullValue()))
                 .andExpect(jsonPath("$.economy.negativeProfitStreak").exists())
-                .andExpect(jsonPath("$.economy.calculationScope").exists())
+                .andExpect(jsonPath("$.economy.status").value("NO_DATA"))
+                .andExpect(jsonPath("$.economy.calculationScope", startsWith("PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS")))
                 .andExpect(jsonPath("$.economy.calculatedAt").exists())
+                .andExpect(jsonPath("$.economy.currency").value("SYNTHETIC_KRW"))
+                .andExpect(jsonPath("$.economy.periodStart").exists())
+                .andExpect(jsonPath("$.economy.periodEnd").exists())
+                .andExpect(jsonPath("$.economy.sourceLatestEventAt").value(nullValue()))
                 .andExpect(jsonPath("$.production.productionRequested").value(nullValue()))
                 .andExpect(jsonPath("$.production.productionCompleted").value(nullValue()))
                 .andExpect(jsonPath("$.production.productionBacklog").value(nullValue()))

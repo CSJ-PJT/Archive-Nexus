@@ -226,12 +226,32 @@ public class OutboxEventService {
         );
     }
 
-    public EconomyAggregate economyAggregate() {
-        OutboxEventRepository.EconomyAggregateProjection value = repository.aggregateEconomy();
+    public EconomyAggregate economyAggregate(Instant since, Instant until) {
+        Objects.requireNonNull(since, "since");
+        Objects.requireNonNull(until, "until");
+        if (until.isBefore(since)) {
+            throw new IllegalArgumentException("until must not be before since");
+        }
+        OutboxEventRepository.EconomyAggregateProjection value = repository.aggregateEconomy(since, until);
         return new EconomyAggregate(
-                value.getProductionEvents(), value.getMaintenanceRequired(), value.getQualityDefects(),
+                value.getPublishedEvents(), value.getProductionEvents(), value.getMaintenanceRequired(), value.getQualityDefects(),
                 zero(value.getManufacturingRevenue()), zero(value.getMaterialCost()), zero(value.getMaintenanceCost()),
-                zero(value.getQualityLossCost()), zero(value.getLogisticsFee()), "ALL_PERSISTED_OUTBOX_EVENTS");
+                zero(value.getQualityLossCost()), zero(value.getLogisticsFee()),
+                "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS", value.getSourceLatestEventAt());
+    }
+
+    public List<OutboxEventResponse> publishedEventsBetween(Instant since, Instant until, int limit) {
+        Objects.requireNonNull(since, "since");
+        Objects.requireNonNull(until, "until");
+        if (until.isBefore(since)) {
+            throw new IllegalArgumentException("until must not be before since");
+        }
+        int safeLimit = Math.max(1, Math.min(limit, 1000));
+        return repository.findAllByStatusAndCreatedAtBetweenOrderByCreatedAtDesc(
+                        OutboxStatus.PUBLISHED, since, until, PageRequest.of(0, safeLimit))
+                .stream()
+                .map(this::response)
+                .toList();
     }
 
     public IntegrationSummary integrationSummary() {
@@ -252,9 +272,10 @@ public class OutboxEventService {
 
     private BigDecimal zero(BigDecimal value) { return value == null ? BigDecimal.ZERO : value.max(BigDecimal.ZERO); }
 
-    public record EconomyAggregate(long productionEvents, long maintenanceRequired, long qualityDefects,
+    public record EconomyAggregate(long publishedEvents, long productionEvents, long maintenanceRequired, long qualityDefects,
                                    BigDecimal manufacturingRevenue, BigDecimal materialCost, BigDecimal maintenanceCost,
-                                   BigDecimal qualityLossCost, BigDecimal logisticsFee, String calculationScope) {}
+                                   BigDecimal qualityLossCost, BigDecimal logisticsFee, String calculationScope,
+                                   Instant sourceLatestEventAt) {}
 
     @Scheduled(fixedDelayString = "${archive.integrations.routing.publish-interval-ms:${archive-nexus.ledger.publish-interval-ms:15000}}")
     public void scheduledPublish() {

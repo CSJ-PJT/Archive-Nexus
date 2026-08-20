@@ -85,7 +85,11 @@ public final class RuntimeEventModels {
             String reason,
             BigDecimal totalCost,
             String calculationScope,
-            Instant calculatedAt
+            Instant calculatedAt,
+            String currency,
+            Instant periodStart,
+            Instant periodEnd,
+            Instant sourceLatestEventAt
     ) {
     }
 

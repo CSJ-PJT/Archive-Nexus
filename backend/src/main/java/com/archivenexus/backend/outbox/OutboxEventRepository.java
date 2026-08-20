@@ -5,8 +5,10 @@ import com.archivenexus.backend.outbox.OutboxModels.OutboxTargetService;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -22,6 +24,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
     List<OutboxEventEntity> findAllByStatusInAndSourceOrderByCreatedAtDesc(Collection<OutboxStatus> statuses, String source, Pageable pageable);
     List<OutboxEventEntity> findAllByTargetServiceOrderByCreatedAtDesc(OutboxTargetService targetService, Pageable pageable);
     List<OutboxEventEntity> findAllByStatusOrderByCreatedAtDesc(OutboxStatus status, Pageable pageable);
+    List<OutboxEventEntity> findAllByStatusAndCreatedAtBetweenOrderByCreatedAtDesc(
+            OutboxStatus status, Instant periodStart, Instant periodEnd, Pageable pageable);
     List<OutboxEventEntity> findAllByTargetServiceAndStatusOrderByCreatedAtDesc(OutboxTargetService targetService, OutboxStatus status, Pageable pageable);
     long countByStatus(OutboxStatus status);
     long countByEventType(OutboxModels.EventType eventType);
@@ -32,14 +36,23 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
 
     @Query(value = """
             select
+              count(*) filter (where
+                event_type in ('MATERIAL_CONSUMED', 'MAINTENANCE_COMPLETED',
+                               'QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED', 'LOGISTICS_DISPATCHED')
+                or (event_type = 'PRODUCTION_COMPLETED'
+                    and nullif(trim(payload::jsonb ->> 'totalAmount'), '') is not null)
+              ) as "publishedEvents",
               count(*) filter (where event_type = 'PRODUCTION_COMPLETED') as "productionEvents",
               count(*) filter (where event_type = 'MAINTENANCE_REQUIRED') as "maintenanceRequired",
               count(*) filter (where event_type in ('QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED')) as "qualityDefects",
+              max(created_at) filter (where
+                event_type in ('MATERIAL_CONSUMED', 'MAINTENANCE_COMPLETED',
+                               'QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED', 'LOGISTICS_DISPATCHED')
+                or (event_type = 'PRODUCTION_COMPLETED'
+                    and nullif(trim(payload::jsonb ->> 'totalAmount'), '') is not null)
+              ) as "sourceLatestEventAt",
               coalesce(sum(case when event_type = 'PRODUCTION_COMPLETED' then greatest(coalesce(
-                nullif(payload::jsonb ->> 'totalAmount', '')::numeric,
-                coalesce(nullif(payload::jsonb ->> 'producedQuantity', '')::numeric,
-                         nullif(payload::jsonb ->> 'productionCompleted', '')::numeric,
-                         nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 120000), 0) else 0 end), 0) as "manufacturingRevenue",
+                nullif(payload::jsonb ->> 'totalAmount', '')::numeric, 0), 0) else 0 end), 0) as "manufacturingRevenue",
               coalesce(sum(case when event_type = 'MATERIAL_CONSUMED' then greatest(coalesce(
                 nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
                 coalesce(nullif(payload::jsonb ->> 'materialConsumed', '')::numeric,
@@ -53,13 +66,18 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
                 nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
                 coalesce(nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 2500), 0) else 0 end), 0) as "logisticsFee"
             from nexus_outbox_event
+            where status = 'PUBLISHED'
+              and created_at >= :since
+              and created_at <= :until
             """, nativeQuery = true)
-    EconomyAggregateProjection aggregateEconomy();
+    EconomyAggregateProjection aggregateEconomy(@Param("since") Instant since, @Param("until") Instant until);
 
     interface EconomyAggregateProjection {
+        long getPublishedEvents();
         long getProductionEvents();
         long getMaintenanceRequired();
         long getQualityDefects();
+        Instant getSourceLatestEventAt();
         BigDecimal getManufacturingRevenue();
         BigDecimal getMaterialCost();
         BigDecimal getMaintenanceCost();
