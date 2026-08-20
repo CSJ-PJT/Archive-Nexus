@@ -4,7 +4,9 @@ import com.archivenexus.backend.outbox.OutboxModels.OutboxStatus;
 import com.archivenexus.backend.outbox.OutboxModels.OutboxTargetService;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -27,4 +29,40 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
     long countByTargetServiceAndStatus(OutboxTargetService targetService, OutboxStatus status);
     long countBySource(String source);
     List<OutboxEventEntity> findTop1ByTargetServiceAndStatusInAndLastErrorIsNotNullOrderByLastPublishAttemptAtDesc(OutboxTargetService targetService, Collection<OutboxStatus> statuses);
+
+    @Query(value = """
+            select
+              count(*) filter (where event_type = 'PRODUCTION_COMPLETED') as "productionEvents",
+              count(*) filter (where event_type = 'MAINTENANCE_REQUIRED') as "maintenanceRequired",
+              count(*) filter (where event_type in ('QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED')) as "qualityDefects",
+              coalesce(sum(case when event_type = 'PRODUCTION_COMPLETED' then greatest(coalesce(
+                nullif(payload::jsonb ->> 'totalAmount', '')::numeric,
+                coalesce(nullif(payload::jsonb ->> 'productionCompleted', '')::numeric,
+                         nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 120000), 0) else 0 end), 0) as "manufacturingRevenue",
+              coalesce(sum(case when event_type = 'MATERIAL_CONSUMED' then greatest(coalesce(
+                nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
+                coalesce(nullif(payload::jsonb ->> 'materialConsumed', '')::numeric,
+                         nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 950), 0) else 0 end), 0) as "materialCost",
+              coalesce(sum(case when event_type = 'MAINTENANCE_COMPLETED' then greatest(coalesce(
+                nullif(payload::jsonb ->> 'estimatedCost', '')::numeric, 350000), 0) else 0 end), 0) as "maintenanceCost",
+              coalesce(sum(case when event_type in ('QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED') then greatest(coalesce(
+                nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
+                coalesce(nullif(payload::jsonb ->> 'qualityDefects', '')::numeric, 1) * 25000), 0) else 0 end), 0) as "qualityLossCost",
+              coalesce(sum(case when event_type = 'LOGISTICS_DISPATCHED' then greatest(coalesce(
+                nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
+                coalesce(nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 2500), 0) else 0 end), 0) as "logisticsFee"
+            from nexus_outbox_event
+            """, nativeQuery = true)
+    EconomyAggregateProjection aggregateEconomy();
+
+    interface EconomyAggregateProjection {
+        long getProductionEvents();
+        long getMaintenanceRequired();
+        long getQualityDefects();
+        BigDecimal getManufacturingRevenue();
+        BigDecimal getMaterialCost();
+        BigDecimal getMaintenanceCost();
+        BigDecimal getQualityLossCost();
+        BigDecimal getLogisticsFee();
+    }
 }

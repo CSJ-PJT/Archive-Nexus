@@ -226,6 +226,14 @@ public class OutboxEventService {
         );
     }
 
+    public EconomyAggregate economyAggregate() {
+        OutboxEventRepository.EconomyAggregateProjection value = repository.aggregateEconomy();
+        return new EconomyAggregate(
+                value.getProductionEvents(), value.getMaintenanceRequired(), value.getQualityDefects(),
+                zero(value.getManufacturingRevenue()), zero(value.getMaterialCost()), zero(value.getMaintenanceCost()),
+                zero(value.getQualityLossCost()), zero(value.getLogisticsFee()), "ALL_PERSISTED_OUTBOX_EVENTS");
+    }
+
     public IntegrationSummary integrationSummary() {
         return new IntegrationSummary(
                 UUID.randomUUID().toString(),
@@ -241,6 +249,12 @@ public class OutboxEventService {
                 workforceService.getIfAvailable() == null ? null : workforceService.getIfAvailable().workforceSummary()
         );
     }
+
+    private BigDecimal zero(BigDecimal value) { return value == null ? BigDecimal.ZERO : value.max(BigDecimal.ZERO); }
+
+    public record EconomyAggregate(long productionEvents, long maintenanceRequired, long qualityDefects,
+                                   BigDecimal manufacturingRevenue, BigDecimal materialCost, BigDecimal maintenanceCost,
+                                   BigDecimal qualityLossCost, BigDecimal logisticsFee, String calculationScope) {}
 
     @Scheduled(fixedDelayString = "${archive.integrations.routing.publish-interval-ms:${archive-nexus.ledger.publish-interval-ms:15000}}")
     public void scheduledPublish() {

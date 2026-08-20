@@ -229,29 +229,43 @@ public class RuntimeEventService {
         long productionEvents = 0;
         long maintenanceRequired = 0;
         long qualityDefects = 0;
-
-        for (OutboxEventResponse event : outbox.events(1000)) {
-            Map<String, Object> payload = event.payload() == null ? Map.of() : event.payload();
-            switch (event.eventType()) {
-                case PRODUCTION_COMPLETED -> {
-                    productionEvents++;
-                    manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"),
-                            BigDecimal.valueOf(number(payload.get("productionCompleted"), number(payload.get("quantity"), 0)))
-                                    .multiply(BigDecimal.valueOf(120_000))));
+        String calculationScope = "ALL_PERSISTED_OUTBOX_EVENTS";
+        try {
+            OutboxEventService.EconomyAggregate aggregate = outbox.economyAggregate();
+            productionEvents = aggregate.productionEvents();
+            maintenanceRequired = aggregate.maintenanceRequired();
+            qualityDefects = aggregate.qualityDefects();
+            manufacturingRevenue = aggregate.manufacturingRevenue();
+            materialCost = aggregate.materialCost();
+            maintenanceCost = aggregate.maintenanceCost();
+            qualityLossCost = aggregate.qualityLossCost();
+            logisticsFee = aggregate.logisticsFee();
+            calculationScope = aggregate.calculationScope();
+        } catch (RuntimeException unsupportedAggregateQuery) {
+            calculationScope = "LATEST_1000_PERSISTED_OUTBOX_EVENTS_FALLBACK";
+            for (OutboxEventResponse event : outbox.events(1000)) {
+                Map<String, Object> payload = event.payload() == null ? Map.of() : event.payload();
+                switch (event.eventType()) {
+                    case PRODUCTION_COMPLETED -> {
+                        productionEvents++;
+                        manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"),
+                                BigDecimal.valueOf(number(payload.get("productionCompleted"), number(payload.get("quantity"), 0)))
+                                        .multiply(BigDecimal.valueOf(120_000))));
+                    }
+                    case MATERIAL_CONSUMED -> materialCost = materialCost.add(money(payload.get("estimatedCost"),
+                            BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
+                                    .multiply(BigDecimal.valueOf(950))));
+                    case MAINTENANCE_COMPLETED -> maintenanceCost = maintenanceCost.add(money(payload.get("estimatedCost"), BigDecimal.valueOf(350_000)));
+                    case MAINTENANCE_REQUIRED -> maintenanceRequired++;
+                    case QUALITY_DEFECT_DETECTED, QUALITY_CLAIM_CHARGED -> {
+                        qualityDefects++;
+                        qualityLossCost = qualityLossCost.add(money(payload.get("estimatedCost"),
+                                BigDecimal.valueOf(number(payload.get("qualityDefects"), 1)).multiply(BigDecimal.valueOf(25_000))));
+                    }
+                    case LOGISTICS_DISPATCHED -> logisticsFee = logisticsFee.add(money(payload.get("estimatedCost"),
+                            BigDecimal.valueOf(number(payload.get("quantity"), 0)).multiply(BigDecimal.valueOf(2_500))));
+                    default -> { }
                 }
-                case MATERIAL_CONSUMED -> materialCost = materialCost.add(money(payload.get("estimatedCost"),
-                        BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
-                                .multiply(BigDecimal.valueOf(950))));
-                case MAINTENANCE_COMPLETED -> maintenanceCost = maintenanceCost.add(money(payload.get("estimatedCost"), BigDecimal.valueOf(350_000)));
-                case MAINTENANCE_REQUIRED -> maintenanceRequired++;
-                case QUALITY_DEFECT_DETECTED, QUALITY_CLAIM_CHARGED -> {
-                    qualityDefects++;
-                    qualityLossCost = qualityLossCost.add(money(payload.get("estimatedCost"),
-                            BigDecimal.valueOf(number(payload.get("qualityDefects"), 1)).multiply(BigDecimal.valueOf(25_000))));
-                }
-                case LOGISTICS_DISPATCHED -> logisticsFee = logisticsFee.add(money(payload.get("estimatedCost"),
-                        BigDecimal.valueOf(number(payload.get("quantity"), 0)).multiply(BigDecimal.valueOf(2_500))));
-                default -> { }
             }
         }
         boolean available = productionEvents > 0 || latestWorkday != null;
@@ -276,7 +290,7 @@ public class RuntimeEventService {
                 operatingProfit, qualityDefectRate, downtimeRate,
                 operatingProfit.signum() < 0 ? 1 : 0,
                 true, null, totalCost,
-                "LATEST_1000_PERSISTED_OUTBOX_EVENTS_AND_LATEST_WORKDAY", Instant.now()
+                calculationScope + "_AND_LATEST_WORKDAY", Instant.now()
         );
     }
 
