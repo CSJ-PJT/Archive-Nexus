@@ -289,10 +289,11 @@ public class RuntimeEventService {
         }
         boolean available = publishedEvents > 0;
         if (!available) {
-            return new EconomyOperationsSummary(null, null, null, "NO_DATA",
-                    null, null, null, null, null, null, null, null, null, null, null, 0,
-                    false, "No published synthetic finance events were recorded in the last 24 hours", null,
-                    calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, sourceLatestEventAt);
+            return new EconomyOperationsSummary(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "NO_ACTIVITY",
+                    BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                    BigDecimal.ZERO, BigDecimal.ZERO, null, BigDecimal.ZERO, BigDecimal.ZERO, 0,
+                    true, "The bounded finance query succeeded and found no published synthetic finance events in the last 24 hours", BigDecimal.ZERO,
+                    calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, null, 0, true);
         }
         BigDecimal workforceCost = BigDecimal.ZERO;
         BigDecimal totalCost = materialCost.add(maintenanceCost).add(qualityLossCost).add(logisticsFee).add(workforceCost);
@@ -307,7 +308,8 @@ public class RuntimeEventService {
                 null, qualityDefectRate, downtimeRate,
                 operatingProfit.signum() < 0 ? 1 : 0,
                 true, null, totalCost,
-                calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, sourceLatestEventAt
+                calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, sourceLatestEventAt,
+                publishedEvents, true
         );
     }
 

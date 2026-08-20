@@ -113,14 +113,16 @@ class RuntimeEventServiceEconomyTest {
 
         EconomyOperationsSummary summary = service(outbox).economySummary();
 
-        assertThat(summary.available()).isFalse();
-        assertThat(summary.revenue()).isNull();
-        assertThat(summary.cost()).isNull();
+        assertThat(summary.available()).isTrue();
+        assertThat(summary.revenue()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(summary.cost()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(summary.sourceLatestEventAt()).isNull();
+        assertThat(summary.financialEventCount()).isZero();
+        assertThat(summary.querySucceeded()).isTrue();
     }
 
     @Test
-    void returnsExplicitNoDataContractWhenNoPublishedEventsExistInTheWindow() {
+    void returnsExplicitZeroActivityContractWhenNoPublishedEventsExistInTheWindow() {
         OutboxEventService outbox = mock(OutboxEventService.class);
         when(outbox.economyAggregate(any(Instant.class), any(Instant.class))).thenReturn(new EconomyAggregate(
                 0, 0, 0, 0,
@@ -129,15 +131,17 @@ class RuntimeEventServiceEconomyTest {
 
         EconomyOperationsSummary summary = service(outbox).economySummary();
 
-        assertThat(summary.available()).isFalse();
-        assertThat(summary.status()).isEqualTo("NO_DATA");
-        assertThat(summary.revenue()).isNull();
-        assertThat(summary.cost()).isNull();
-        assertThat(summary.profit()).isNull();
+        assertThat(summary.available()).isTrue();
+        assertThat(summary.status()).isEqualTo("NO_ACTIVITY");
+        assertThat(summary.revenue()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(summary.cost()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(summary.profit()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(summary.cashBalance()).isNull();
         assertThat(summary.calculationScope()).isEqualTo(SCOPE);
         assertThat(summary.currency()).isEqualTo("SYNTHETIC_KRW");
         assertThat(summary.sourceLatestEventAt()).isNull();
+        assertThat(summary.financialEventCount()).isZero();
+        assertThat(summary.querySucceeded()).isTrue();
         assertThat(Duration.between(summary.periodStart(), summary.periodEnd())).isEqualTo(Duration.ofHours(24));
     }
 

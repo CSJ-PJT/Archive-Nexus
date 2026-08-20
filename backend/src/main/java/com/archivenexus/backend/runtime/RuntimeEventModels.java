@@ -89,7 +89,9 @@ public final class RuntimeEventModels {
             String currency,
             Instant periodStart,
             Instant periodEnd,
-            Instant sourceLatestEventAt
+            Instant sourceLatestEventAt,
+            long financialEventCount,
+            boolean querySucceeded
     ) {
     }
 
