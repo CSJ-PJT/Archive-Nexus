@@ -72,7 +72,7 @@ class RuntimeEventServiceEconomyTest {
                             event(2, EventType.PRODUCTION_COMPLETED, OutboxStatus.PUBLISHED,
                                     Map.of("producedQuantity", 999), end.minus(Duration.ofHours(2))),
                             event(3, EventType.MATERIAL_CONSUMED, OutboxStatus.PUBLISHED,
-                                    Map.of("estimatedCost", 100), end.minus(Duration.ofMinutes(30))),
+                                    Map.of("amount", 100), end.minus(Duration.ofMinutes(30))),
                             event(7, EventType.MAINTENANCE_REQUIRED, OutboxStatus.PUBLISHED,
                                     Map.of(), end.minus(Duration.ofMinutes(5))),
                             event(4, EventType.PRODUCTION_COMPLETED, OutboxStatus.PENDING,

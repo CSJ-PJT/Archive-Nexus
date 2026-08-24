@@ -27,6 +27,7 @@ class OutboxEventRepositoryEconomyContractTest {
                 .contains("as \"sourceLatestEventAt\"")
                 .contains("event_type = 'PRODUCTION_COMPLETED' and nullif(trim(payload::jsonb ->> 'totalAmount'), '') is not null")
                 .contains("payload::jsonb ->> 'totalAmount'")
+                .contains("payload::jsonb ->> 'amount'")
                 .doesNotContain("producedQuantity")
                 .doesNotContain("productionCompleted")
                 .doesNotContain("120000");

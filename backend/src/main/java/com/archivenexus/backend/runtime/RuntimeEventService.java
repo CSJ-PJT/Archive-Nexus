@@ -280,14 +280,17 @@ public class RuntimeEventService {
                         manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"), BigDecimal.ZERO));
                     }
                     case MATERIAL_CONSUMED -> materialCost = materialCost.add(money(payload.get("estimatedCost"),
-                            BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
-                                    .multiply(BigDecimal.valueOf(950))));
-                    case MAINTENANCE_COMPLETED -> maintenanceCost = maintenanceCost.add(money(payload.get("estimatedCost"), BigDecimal.valueOf(350_000)));
+                            money(payload.get("amount"),
+                                    BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
+                                            .multiply(BigDecimal.valueOf(950)))));
+                    case MAINTENANCE_COMPLETED -> maintenanceCost = maintenanceCost.add(money(payload.get("estimatedCost"),
+                            money(payload.get("amount"), BigDecimal.valueOf(350_000))));
                     case MAINTENANCE_REQUIRED -> maintenanceRequired++;
                     case QUALITY_DEFECT_DETECTED, QUALITY_CLAIM_CHARGED -> {
                         qualityDefects++;
                         qualityLossCost = qualityLossCost.add(money(payload.get("estimatedCost"),
-                                BigDecimal.valueOf(number(payload.get("qualityDefects"), 1)).multiply(BigDecimal.valueOf(25_000))));
+                                money(payload.get("amount"),
+                                        BigDecimal.valueOf(number(payload.get("qualityDefects"), 1)).multiply(BigDecimal.valueOf(25_000)))));
                     }
                     case LOGISTICS_DISPATCHED -> logisticsFee = logisticsFee.add(money(payload.get("estimatedCost"),
                             BigDecimal.valueOf(number(payload.get("quantity"), 0)).multiply(BigDecimal.valueOf(2_500))));
