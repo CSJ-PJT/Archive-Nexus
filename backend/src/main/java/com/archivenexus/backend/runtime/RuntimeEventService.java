@@ -42,6 +42,7 @@ public class RuntimeEventService {
     private static final Duration ECONOMY_WINDOW = Duration.ofHours(24);
     private static final String ECONOMY_SCOPE = "PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS";
     private static final String ECONOMY_CURRENCY = "SYNTHETIC_KRW";
+    private static final BigDecimal DEFAULT_MATERIAL_COST_RATIO = new BigDecimal("0.88");
 
     private final OutboxEventService outbox;
     private final MarketInboundEventRepository marketEvents;
@@ -279,10 +280,14 @@ public class RuntimeEventService {
                         productionEvents++;
                         manufacturingRevenue = manufacturingRevenue.add(money(payload.get("totalAmount"), BigDecimal.ZERO));
                     }
-                    case MATERIAL_CONSUMED -> materialCost = materialCost.add(money(payload.get("estimatedCost"),
-                            money(payload.get("amount"),
-                                    BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
-                                            .multiply(BigDecimal.valueOf(950)))));
+                    case MATERIAL_CONSUMED -> {
+                        BigDecimal unitFallback = BigDecimal.valueOf(number(payload.get("materialConsumed"), number(payload.get("quantity"), 0)))
+                                .multiply(BigDecimal.valueOf(950));
+                        BigDecimal persistedAmountFallback = isExplicitAmount(payload.get("amount"))
+                                ? money(payload.get("amount"), BigDecimal.ZERO).multiply(DEFAULT_MATERIAL_COST_RATIO)
+                                : unitFallback;
+                        materialCost = materialCost.add(money(payload.get("estimatedCost"), persistedAmountFallback));
+                    }
                     case MAINTENANCE_COMPLETED -> maintenanceCost = maintenanceCost.add(money(payload.get("estimatedCost"),
                             money(payload.get("amount"), BigDecimal.valueOf(350_000))));
                     case MAINTENANCE_REQUIRED -> maintenanceRequired++;

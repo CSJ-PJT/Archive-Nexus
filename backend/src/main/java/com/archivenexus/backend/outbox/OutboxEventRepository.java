@@ -59,7 +59,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
                 nullif(payload::jsonb ->> 'totalAmount', '')::numeric, 0), 0) else 0 end), 0) as "manufacturingRevenue",
               coalesce(sum(case when event_type = 'MATERIAL_CONSUMED' then greatest(coalesce(
                 nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
-                nullif(payload::jsonb ->> 'amount', '')::numeric,
+                nullif(payload::jsonb ->> 'amount', '')::numeric * 0.88,
                 coalesce(nullif(payload::jsonb ->> 'materialConsumed', '')::numeric,
                          nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 950), 0) else 0 end), 0) as "materialCost",
               coalesce(sum(case when event_type = 'MAINTENANCE_COMPLETED' then greatest(coalesce(

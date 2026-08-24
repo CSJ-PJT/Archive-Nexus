@@ -89,9 +89,9 @@ class RuntimeEventServiceEconomyTest {
         EconomyOperationsSummary summary = service(outbox).economySummary();
 
         assertThat(summary.manufacturingRevenue()).isEqualByComparingTo("6000");
-        assertThat(summary.materialCost()).isEqualByComparingTo("100");
-        assertThat(summary.totalCost()).isEqualByComparingTo("100");
-        assertThat(summary.operatingProfit()).isEqualByComparingTo("5900");
+        assertThat(summary.materialCost()).isEqualByComparingTo("88");
+        assertThat(summary.totalCost()).isEqualByComparingTo("88");
+        assertThat(summary.operatingProfit()).isEqualByComparingTo("5912");
         assertThat(summary.cashBalance()).isNull();
         assertThat(summary.calculationScope()).isEqualTo(SCOPE + "_FALLBACK_LATEST_1000");
         assertThat(summary.currency()).isEqualTo("SYNTHETIC_KRW");
