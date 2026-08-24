@@ -26,6 +26,8 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
     List<OutboxEventEntity> findAllByStatusOrderByCreatedAtDesc(OutboxStatus status, Pageable pageable);
     List<OutboxEventEntity> findAllByStatusAndCreatedAtBetweenOrderByCreatedAtDesc(
             OutboxStatus status, Instant periodStart, Instant periodEnd, Pageable pageable);
+    List<OutboxEventEntity> findAllByStatusInAndCreatedAtBetweenOrderByCreatedAtDesc(
+            Collection<OutboxStatus> statuses, Instant periodStart, Instant periodEnd, Pageable pageable);
     List<OutboxEventEntity> findAllByTargetServiceAndStatusOrderByCreatedAtDesc(OutboxTargetService targetService, OutboxStatus status, Pageable pageable);
     long countByStatus(OutboxStatus status);
     long countByEventTypeAndStatusAndCreatedAtBetween(
@@ -43,7 +45,7 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
                                'QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED', 'LOGISTICS_DISPATCHED')
                 or (event_type = 'PRODUCTION_COMPLETED'
                     and nullif(trim(payload::jsonb ->> 'totalAmount'), '') is not null)
-              ) as "publishedEvents",
+              ) as "recognizedEvents",
               count(*) filter (where event_type = 'PRODUCTION_COMPLETED') as "productionEvents",
               count(*) filter (where event_type = 'MAINTENANCE_REQUIRED') as "maintenanceRequired",
               count(*) filter (where event_type in ('QUALITY_DEFECT_DETECTED', 'QUALITY_CLAIM_CHARGED')) as "qualityDefects",
@@ -68,14 +70,14 @@ public interface OutboxEventRepository extends JpaRepository<OutboxEventEntity, 
                 nullif(payload::jsonb ->> 'estimatedCost', '')::numeric,
                 coalesce(nullif(payload::jsonb ->> 'quantity', '')::numeric, 0) * 2500), 0) else 0 end), 0) as "logisticsFee"
             from nexus_outbox_event
-            where status = 'PUBLISHED'
+            where status in ('PENDING', 'PUBLISHED', 'PENDING_RETRY')
               and created_at >= :since
               and created_at <= :until
             """, nativeQuery = true)
     EconomyAggregateProjection aggregateEconomy(@Param("since") Instant since, @Param("until") Instant until);
 
     interface EconomyAggregateProjection {
-        long getPublishedEvents();
+        long getRecognizedEvents();
         long getProductionEvents();
         long getMaintenanceRequired();
         long getQualityDefects();

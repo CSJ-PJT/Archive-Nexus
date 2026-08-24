@@ -234,21 +234,22 @@ public class OutboxEventService {
         }
         OutboxEventRepository.EconomyAggregateProjection value = repository.aggregateEconomy(since, until);
         return new EconomyAggregate(
-                value.getPublishedEvents(), value.getProductionEvents(), value.getMaintenanceRequired(), value.getQualityDefects(),
+                value.getRecognizedEvents(), value.getProductionEvents(), value.getMaintenanceRequired(), value.getQualityDefects(),
                 zero(value.getManufacturingRevenue()), zero(value.getMaterialCost()), zero(value.getMaintenanceCost()),
                 zero(value.getQualityLossCost()), zero(value.getLogisticsFee()),
-                "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS", value.getSourceLatestEventAt());
+                "PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS", value.getSourceLatestEventAt());
     }
 
-    public List<OutboxEventResponse> publishedEventsBetween(Instant since, Instant until, int limit) {
+    public List<OutboxEventResponse> recognizedEventsBetween(Instant since, Instant until, int limit) {
         Objects.requireNonNull(since, "since");
         Objects.requireNonNull(until, "until");
         if (until.isBefore(since)) {
             throw new IllegalArgumentException("until must not be before since");
         }
         int safeLimit = Math.max(1, Math.min(limit, 1000));
-        return repository.findAllByStatusAndCreatedAtBetweenOrderByCreatedAtDesc(
-                        OutboxStatus.PUBLISHED, since, until, PageRequest.of(0, safeLimit))
+        return repository.findAllByStatusInAndCreatedAtBetweenOrderByCreatedAtDesc(
+                        List.of(OutboxStatus.PENDING, OutboxStatus.PUBLISHED, OutboxStatus.PENDING_RETRY),
+                        since, until, PageRequest.of(0, safeLimit))
                 .stream()
                 .map(this::response)
                 .toList();
@@ -272,7 +273,7 @@ public class OutboxEventService {
 
     private BigDecimal zero(BigDecimal value) { return value == null ? BigDecimal.ZERO : value.max(BigDecimal.ZERO); }
 
-    public record EconomyAggregate(long publishedEvents, long productionEvents, long maintenanceRequired, long qualityDefects,
+    public record EconomyAggregate(long recognizedEvents, long productionEvents, long maintenanceRequired, long qualityDefects,
                                    BigDecimal manufacturingRevenue, BigDecimal materialCost, BigDecimal maintenanceCost,
                                    BigDecimal qualityLossCost, BigDecimal logisticsFee, String calculationScope,
                                    Instant sourceLatestEventAt) {}

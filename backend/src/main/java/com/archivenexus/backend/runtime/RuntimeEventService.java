@@ -40,7 +40,7 @@ public class RuntimeEventService {
     private static final String SERVICE_NAME = "Archive-Nexus";
     private static final String SERVICE_ROLE = "Manufacturing AX runtime, market inbound, workforce capacity, and outbox routing";
     private static final Duration ECONOMY_WINDOW = Duration.ofHours(24);
-    private static final String ECONOMY_SCOPE = "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS";
+    private static final String ECONOMY_SCOPE = "PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS";
     private static final String ECONOMY_CURRENCY = "SYNTHETIC_KRW";
 
     private final OutboxEventService outbox;
@@ -228,7 +228,8 @@ public class RuntimeEventService {
     }
 
     /**
-     * Synthetic recognized P&amp;L derived only from published Nexus outbox events in the last 24 hours.
+     * Synthetic recognized P&amp;L derived from persisted, non-terminal Nexus outbox events in the last 24 hours.
+     * Delivery state is intentionally independent from recognition so a downstream outage cannot erase current operations.
      * Operational workday metrics remain separate and no cash balance is inferred from profit.
      */
     EconomyOperationsSummary economySummary() {
@@ -239,7 +240,7 @@ public class RuntimeEventService {
         BigDecimal maintenanceCost = BigDecimal.ZERO;
         BigDecimal qualityLossCost = BigDecimal.ZERO;
         BigDecimal logisticsFee = BigDecimal.ZERO;
-        long publishedEvents = 0;
+        long recognizedEvents = 0;
         long productionEvents = 0;
         long maintenanceRequired = 0;
         long qualityDefects = 0;
@@ -247,7 +248,7 @@ public class RuntimeEventService {
         String calculationScope = ECONOMY_SCOPE;
         try {
             OutboxEventService.EconomyAggregate aggregate = outbox.economyAggregate(since, calculatedAt);
-            publishedEvents = aggregate.publishedEvents();
+            recognizedEvents = aggregate.recognizedEvents();
             productionEvents = aggregate.productionEvents();
             maintenanceRequired = aggregate.maintenanceRequired();
             qualityDefects = aggregate.qualityDefects();
@@ -260,14 +261,15 @@ public class RuntimeEventService {
             sourceLatestEventAt = aggregate.sourceLatestEventAt();
         } catch (RuntimeException unsupportedAggregateQuery) {
             calculationScope = ECONOMY_SCOPE + "_FALLBACK_LATEST_1000";
-            for (OutboxEventResponse event : outbox.publishedEventsBetween(since, calculatedAt, 1000)) {
-                if (event.status() != OutboxStatus.PUBLISHED || event.createdAt() == null
+            for (OutboxEventResponse event : outbox.recognizedEventsBetween(since, calculatedAt, 1000)) {
+                if (!List.of(OutboxStatus.PENDING, OutboxStatus.PUBLISHED, OutboxStatus.PENDING_RETRY).contains(event.status())
+                        || event.createdAt() == null
                         || event.createdAt().isBefore(since) || event.createdAt().isAfter(calculatedAt)) {
                     continue;
                 }
                 Map<String, Object> payload = event.payload() == null ? Map.of() : event.payload();
                 if (isFinanceEvent(event.eventType(), payload)) {
-                    publishedEvents++;
+                    recognizedEvents++;
                     if (sourceLatestEventAt == null || event.createdAt().isAfter(sourceLatestEventAt)) {
                         sourceLatestEventAt = event.createdAt();
                     }
@@ -293,12 +295,12 @@ public class RuntimeEventService {
                 }
             }
         }
-        boolean available = publishedEvents > 0;
+        boolean available = recognizedEvents > 0;
         if (!available) {
             return new EconomyOperationsSummary(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, "NO_ACTIVITY",
                     BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
                     BigDecimal.ZERO, BigDecimal.ZERO, null, BigDecimal.ZERO, BigDecimal.ZERO, 0,
-                    true, "The bounded finance query succeeded and found no published synthetic finance events in the last 24 hours", BigDecimal.ZERO,
+                    true, "The bounded finance query succeeded and found no persisted synthetic finance events in the last 24 hours", BigDecimal.ZERO,
                     calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, null, 0, true);
         }
         BigDecimal workforceCost = BigDecimal.ZERO;
@@ -308,14 +310,14 @@ public class RuntimeEventService {
         BigDecimal downtimeRate = percent(maintenanceRequired, Math.max(1L, productionEvents + maintenanceRequired));
         return new EconomyOperationsSummary(
                 manufacturingRevenue, totalCost, operatingProfit,
-                "SYNTHETIC_PUBLISHED_OUTBOX_24H",
+                "SYNTHETIC_PERSISTED_OUTBOX_24H",
                 manufacturingRevenue, materialCost, maintenanceCost, qualityLossCost, logisticsFee, workforceCost,
                 operatingProfit, percent(operatingProfit, manufacturingRevenue),
                 null, qualityDefectRate, downtimeRate,
                 operatingProfit.signum() < 0 ? 1 : 0,
                 true, null, totalCost,
                 calculationScope, calculatedAt, ECONOMY_CURRENCY, since, calculatedAt, sourceLatestEventAt,
-                publishedEvents, true
+                recognizedEvents, true
         );
     }
 

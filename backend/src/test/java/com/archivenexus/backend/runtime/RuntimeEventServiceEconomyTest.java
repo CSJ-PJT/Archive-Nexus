@@ -26,10 +26,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class RuntimeEventServiceEconomyTest {
-    private static final String SCOPE = "PUBLISHED_OUTBOX_EVENTS_LAST_24_HOURS";
+    private static final String SCOPE = "PERSISTED_OUTBOX_EVENTS_LAST_24_HOURS";
 
     @Test
-    void calculatesRecognizedProfitForOneBoundedPublishedWindowWithoutInventingCash() {
+    void calculatesRecognizedProfitForOneBoundedPersistedWindowWithoutInventingCash() {
         OutboxEventService outbox = mock(OutboxEventService.class);
         Instant sourceLatestEventAt = Instant.parse("2026-08-20T01:02:03Z");
         when(outbox.economyAggregate(any(Instant.class), any(Instant.class))).thenReturn(new EconomyAggregate(
@@ -44,7 +44,7 @@ class RuntimeEventServiceEconomyTest {
         assertThat(summary.operatingProfit()).isEqualByComparingTo("815");
         assertThat(summary.workforceCost()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(summary.cashBalance()).isNull();
-        assertThat(summary.status()).isEqualTo("SYNTHETIC_PUBLISHED_OUTBOX_24H");
+        assertThat(summary.status()).isEqualTo("SYNTHETIC_PERSISTED_OUTBOX_24H");
         assertThat(summary.calculationScope()).isEqualTo(SCOPE);
         assertThat(summary.currency()).isEqualTo("SYNTHETIC_KRW");
         assertThat(summary.sourceLatestEventAt()).isEqualTo(sourceLatestEventAt);
@@ -58,11 +58,11 @@ class RuntimeEventServiceEconomyTest {
     }
 
     @Test
-    void fallbackIgnoresUnpublishedAndOutOfWindowEventsAndRequiresExplicitProductionAmount() {
+    void fallbackRecognizesNonTerminalPersistedEventsAndIgnoresTerminalOrOutOfWindowEvents() {
         OutboxEventService outbox = mock(OutboxEventService.class);
         when(outbox.economyAggregate(any(Instant.class), any(Instant.class)))
                 .thenThrow(new IllegalStateException("native aggregate unavailable"));
-        when(outbox.publishedEventsBetween(any(Instant.class), any(Instant.class), eq(1000)))
+        when(outbox.recognizedEventsBetween(any(Instant.class), any(Instant.class), eq(1000)))
                 .thenAnswer(invocation -> {
                     Instant start = invocation.getArgument(0);
                     Instant end = invocation.getArgument(1);
@@ -77,6 +77,8 @@ class RuntimeEventServiceEconomyTest {
                                     Map.of(), end.minus(Duration.ofMinutes(5))),
                             event(4, EventType.PRODUCTION_COMPLETED, OutboxStatus.PENDING,
                                     Map.of("totalAmount", 5000), end.minus(Duration.ofMinutes(10))),
+                            event(8, EventType.PRODUCTION_COMPLETED, OutboxStatus.FAILED,
+                                    Map.of("totalAmount", 7000), end.minus(Duration.ofMinutes(8))),
                             event(5, EventType.PRODUCTION_COMPLETED, OutboxStatus.PUBLISHED,
                                     Map.of("totalAmount", 5000), start.minusSeconds(1)),
                             event(6, EventType.PRODUCTION_COMPLETED, OutboxStatus.PUBLISHED,
@@ -86,14 +88,14 @@ class RuntimeEventServiceEconomyTest {
 
         EconomyOperationsSummary summary = service(outbox).economySummary();
 
-        assertThat(summary.manufacturingRevenue()).isEqualByComparingTo("1000");
+        assertThat(summary.manufacturingRevenue()).isEqualByComparingTo("6000");
         assertThat(summary.materialCost()).isEqualByComparingTo("100");
         assertThat(summary.totalCost()).isEqualByComparingTo("100");
-        assertThat(summary.operatingProfit()).isEqualByComparingTo("900");
+        assertThat(summary.operatingProfit()).isEqualByComparingTo("5900");
         assertThat(summary.cashBalance()).isNull();
         assertThat(summary.calculationScope()).isEqualTo(SCOPE + "_FALLBACK_LATEST_1000");
         assertThat(summary.currency()).isEqualTo("SYNTHETIC_KRW");
-        assertThat(summary.sourceLatestEventAt()).isEqualTo(summary.periodEnd().minus(Duration.ofMinutes(30)));
+        assertThat(summary.sourceLatestEventAt()).isEqualTo(summary.periodEnd().minus(Duration.ofMinutes(10)));
     }
 
     @Test
@@ -101,7 +103,7 @@ class RuntimeEventServiceEconomyTest {
         OutboxEventService outbox = mock(OutboxEventService.class);
         when(outbox.economyAggregate(any(Instant.class), any(Instant.class)))
                 .thenThrow(new IllegalStateException("native aggregate unavailable"));
-        when(outbox.publishedEventsBetween(any(Instant.class), any(Instant.class), eq(1000)))
+        when(outbox.recognizedEventsBetween(any(Instant.class), any(Instant.class), eq(1000)))
                 .thenAnswer(invocation -> {
                     Instant end = invocation.getArgument(1);
                     return List.of(
@@ -122,7 +124,7 @@ class RuntimeEventServiceEconomyTest {
     }
 
     @Test
-    void returnsExplicitZeroActivityContractWhenNoPublishedEventsExistInTheWindow() {
+    void returnsExplicitZeroActivityContractWhenNoPersistedFinanceEventsExistInTheWindow() {
         OutboxEventService outbox = mock(OutboxEventService.class);
         when(outbox.economyAggregate(any(Instant.class), any(Instant.class))).thenReturn(new EconomyAggregate(
                 0, 0, 0, 0,
